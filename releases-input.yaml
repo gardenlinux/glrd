@@ -1,0 +1,99 @@
+# This file is supposed to provide data that is not automatically retrievable.
+# e.g. lifecycle.extended and lifecycle.eol data
+releases:
+  - name: release-27
+    type: 'stable'
+    version:
+      major: 27
+    lifecycle:
+      released:
+        isodate: '2020-06-09'
+        timestamp: 1591694693
+      extended:
+        isodate: '2020-12-09'
+      eol:
+        isodate: '2021-03-09'
+  - name: release-184
+    type: 'stable'
+    version:
+      major: 184
+    lifecycle:
+      released:
+        isodate: '2020-10-29'
+        timestamp: 1603984625
+      extended:
+        isodate: '2020-04-29'
+      eol:
+        isodate: '2021-07-29'
+  - name: release-318
+    type: 'stable'
+    version:
+      major: 318
+    lifecycle:
+      released:
+        isodate: '2021-04-28'
+        timestamp: 1619614135
+      extended:
+        isodate: '2021-10-28'
+      eol:
+        isodate: '2023-01-28'
+  - name: release-576
+    type: 'stable'
+    version:
+      major: 576
+    lifecycle:
+      released:
+        isodate: '2021-11-17'
+        timestamp: 1637142852
+      extended:
+        isodate: '2023-05-17'
+      eol:
+        isodate: '2023-08-17'
+  - name: release-934
+    type: 'stable'
+    version:
+      major: 934
+    lifecycle:
+      released:
+        isodate: '2023-06-05'
+        timestamp: 1685968163
+      extended:
+        isodate: '2023-12-05'
+      eol:
+        isodate: '2024-03-05'
+  - name: release-1312
+    type: 'stable'
+    version:
+      major: 1312
+    lifecycle:
+      released:
+        isodate: '2023-11-16'
+        timestamp: 1700136050
+      extended:
+        isodate: '2024-05-03'
+      eol:
+        isodate: '2024-08-03'
+  - name: release-1443
+    type: 'stable'
+    version:
+      major: 1443
+    lifecycle:
+      released:
+        isodate: '2024-03-13'
+        timestamp: 1710341636
+      extended:
+        isodate: '2024-09-13'
+      eol:
+        isodate: '2025-01-13'
+  - name: release-1592
+    type: 'stable'
+    version:
+      major: 1592
+    lifecycle:
+      released:
+        isodate: '2024-08-12'
+        timestamp: 1723457202
+      extended:
+        isodate: '2025-05-12'
+      eol:
+        isodate: '2025-08-12'

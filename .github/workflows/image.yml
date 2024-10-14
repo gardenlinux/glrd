@@ -1,0 +1,72 @@
+
+name: publish GLRD container image
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    name: build
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-latest-arm' || 'ubuntu-latest' }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ amd64, arm64 ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - uses: ./.github/actions/setup
+      - name: podman login
+        run: |
+          podman login -u token -p ${{ github.token }} ghcr.io
+      - name: podman build
+        run: |
+          podman build --platform linux/${{ matrix.arch }} -t glrd .
+      - name: podman build
+        run: |
+          podman save --format oci-archive glrd >/tmp/${{ matrix.arch }}-oci.tar
+      - name: upload build-${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.arch }}
+          path: /tmp/${{ matrix.arch }}-oci.tar
+          if-no-files-found: error
+          retention-days: 1            
+  push:
+    name: push
+    runs-on: 'ubuntu-latest'
+    defaults:
+      run:
+        shell: bash
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - uses: ./.github/actions/setup
+      - name: download build-amd64
+        uses: actions/download-artifact@v4
+        with:
+          name: build-amd64
+          path: /tmp        
+      - name: download build-arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: build-arm64
+          path: /tmp        
+      - name: podman login
+        run: |
+          podman login -u token -p ${{ github.token }} ghcr.io
+      - name: podman manifest
+        run: |
+          podman manifest create ghcr.io/${{ github.repository }}
+          podman manifest add ghcr.io/${{ github.repository }} oci-archive:/tmp/amd64-oci.tar
+          podman manifest add ghcr.io/${{ github.repository }} oci-archive:/tmp/arm64-oci.tar
+      - name: podman push
+        run: |
+          podman manifest push ghcr.io/${{ github.repository }} docker://ghcr.io/${{ github.repository }}

@@ -1,0 +1,789 @@
+#!/usr/bin/env python3
+
+import argparse
+import re
+import json
+import pytz
+import yaml
+import boto3
+from botocore.exceptions import ClientError
+from jsonschema import validate, ValidationError
+import subprocess
+from datetime import datetime, timedelta
+import tempfile
+import requests
+import os
+import sys
+import atexit
+import shutil
+
+# JSON schema for stable, patch, and nightly releases
+schemas = {
+    "stable": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "type": {"enum": ["stable"]},
+            "version": {
+                "type": "object",
+                "properties": {"major": {"type": "integer"}},
+                "required": ["major"]
+            },
+            "lifecycle": {
+                "type": "object",
+                "properties": {
+                    "released": {"type": "object", "properties": {
+                        "isodate": {"type": "string", "format": "date"},
+                        "timestamp": {"type": "integer"}},
+                        "required": ["isodate", "timestamp"]},
+                    "extended": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": ["string", "null"], "format": "date"},
+                            "timestamp": {"type": ["integer", "null"]}
+                        }
+                    },
+                    "eol": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": ["string", "null"], "format": "date"},
+                            "timestamp": {"type": ["integer", "null"]}
+                        }
+                    }
+                },
+                "required": ["released", "eol"]
+            }
+        },
+        "required": ["name", "type", "version", "lifecycle"]
+    },
+    "patch": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "type": {"enum": ["patch"]},
+            "version": {
+                "type": "object",
+                "properties": {
+                    "major": {"type": "integer"},
+                    "minor": {"type": "integer"}
+                },
+                "required": ["major", "minor"]
+            },
+            "lifecycle": {
+                "type": "object",
+                "properties": {
+                    "released": {"type": "object", "properties": {
+                        "isodate": {"type": "string", "format": "date"},
+                        "timestamp": {"type": "integer"}},
+                        "required": ["isodate", "timestamp"]},
+                    "eol": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": ["string", "null"], "format": "date"},
+                            "timestamp": {"type": ["integer", "null"]}
+                        }
+                    }
+                },
+                "required": ["released", "eol"]
+            },
+            "git": {
+                "type": "object",
+                "properties": {
+                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7}$"}
+                },
+                "required": ["commit", "commit_short"]
+            },
+            "github": {
+                "type": "object",
+                "properties": {"release": {"type": "string", "format": "uri"}},
+                "required": ["release"]
+            }
+        },
+        "required": ["name", "type", "version", "lifecycle", "git", "github"]
+    },
+    "nightly": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "type": {"enum": ["nightly"]},
+            "version": {
+                "type": "object",
+                "properties": {"major": {"type": "integer"}, "minor": {"type": "integer"}},
+                "required": ["major", "minor"]
+            },
+            "lifecycle": {
+                "type": "object",
+                "properties": {
+                    "released": {"type": "object", "properties": {
+                        "isodate": {"type": "string", "format": "date"},
+                        "timestamp": {"type": "integer"}},
+                        "required": ["isodate", "timestamp"]}
+                },
+                "required": ["released"]
+            },
+            "git": {
+                "type": "object",
+                "properties": {
+                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7}$"}
+                },
+                "required": ["commit", "commit_short"]
+            }
+        },
+        "required": ["name", "type", "version", "lifecycle", "git"]
+    },
+    "dev": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "type": {"enum": ["dev"]},
+            "version": {
+                "type": "object",
+                "properties": {"major": {"type": "integer"}, "minor": {"type": "integer"}},
+                "required": ["major", "minor"]
+            },
+            "lifecycle": {
+                "type": "object",
+                "properties": {
+                    "released": {"type": "object", "properties": {
+                        "isodate": {"type": "string", "format": "date"},
+                        "timestamp": {"type": "integer"}},
+                        "required": ["isodate", "timestamp"]}
+                },
+                "required": ["released"]
+            },
+            "git": {
+                "type": "object",
+                "properties": {
+                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7}$"}
+                },
+                "required": ["commit", "commit_short"]
+            }
+        },
+        "required": ["name", "type", "version", "lifecycle", "git"]
+    }
+}
+
+# Global variable to store the path of the cloned gardenlinux repository (cached)
+repo_clone_path = None
+
+def cleanup_temp_repo():
+    """Cleanup function to delete the temporary directory at the end of the script."""
+    global repo_clone_path
+    if repo_clone_path and os.path.exists(repo_clone_path):
+        shutil.rmtree(repo_clone_path)
+
+def get_git_root():
+    """Get the root directory of the current git repository."""
+    command = ["git", "rev-parse", "--show-toplevel"]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        sys.exit(f"Error finding git root: {result.stderr}")
+    return result.stdout.strip()
+
+def get_github_releases():
+    """Fetch releases from the GitHub API using the 'gh' command."""
+    command = ["gh", "api", "--paginate", "/repos/gardenlinux/gardenlinux/releases"]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        sys.exit(f"Error fetching GitHub releases: {result.stderr}")
+    return json.loads(result.stdout)
+
+def get_git_commit_from_tag(tag):
+    """
+    Fetch the git commit hash for a given tag using the GitHub API.
+    """
+    try:
+        # Use the GitHub API to get the commit hash from the tag name
+        command = ["gh", "api", f"/repos/gardenlinux/gardenlinux/git/refs/tags/{tag}", "--jq", ".object.sha"]
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        if result.returncode != 0:
+            print(f"Error fetching git commit for tag: {tag}, {result.stderr}", file=sys.stderr)
+            sys.exit(1)
+
+        commit = result.stdout.strip()
+        return commit, commit[:7]  # Return full commit and shortened version
+    except Exception as e:
+        print(f"Error fetching git commit for tag {tag}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def extract_version_data(tag_name):
+    """Extract major and minor version numbers from a tag."""
+    version_regex = re.compile(r'^(\d+)\.?(\d+)?$')
+    match = version_regex.match(tag_name)
+    return (int(match.group(1)), int(match.group(2))) if match else (None, None)
+
+def isodate_to_timestamp(isodate):
+    """Convert ISO date to timestamp."""
+    return int(datetime.strptime(isodate, "%Y-%m-%d").timestamp())
+
+def timestamp_to_isodate(timestamp):
+    """Convert timestamp to ISO date."""
+    dt = datetime.utcfromtimestamp(timestamp)
+    return dt.strftime("%Y-%m-%d")
+
+def ensure_isodate_and_timestamp(lifecycle):
+    """
+    Ensure both isodate and timestamp are set for all lifecycle fields (released, extended, eol).
+    If only one is present, the other is computed.
+    """
+    for key in ['released', 'extended', 'eol']:
+        if key in lifecycle and lifecycle[key]:
+            entry = lifecycle[key]
+            # Ensure if 'isodate' exists, 'timestamp' is computed
+            if 'isodate' in entry and entry['isodate'] and not entry.get('timestamp'):
+                entry['timestamp'] = isodate_to_timestamp(entry['isodate'])
+            # Ensure if 'timestamp' exists, 'isodate' is computed
+            elif 'timestamp' in entry and entry['timestamp'] and not entry.get('isodate'):
+                entry['isodate'] = timestamp_to_isodate(entry['timestamp'])
+                
+def get_git_commit_at_time(date, time="08:00", branch="main", remote_repo="https://github.com/gardenlinux/gardenlinux"):
+    """Fetch the git commit that was at a specific date and time in the main branch, using a temporary cached git clone."""
+    global repo_clone_path
+    
+    # Convert the input date and time to the target timezone (UTC) and then to UTC
+    target_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").astimezone(pytz.timezone('UTC'))
+    target_time_utc = target_time.astimezone(pytz.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    
+    # If the repository hasn't been cloned yet, clone it to a dynamically created temp directory
+    if not repo_clone_path:
+        # Create a temporary directory for cloning the repository
+        temp_dir = tempfile.mkdtemp(prefix="glrd_temp_repo_")
+        
+        # Perform the shallow clone
+        clone_command = ["git", "clone", "--depth", "1", "--branch", branch, remote_repo, temp_dir]
+        clone_result = subprocess.run(clone_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        if clone_result.returncode != 0:
+            sys.exit(f"Error cloning remote repository: {clone_result.stderr}")
+        
+        # Fetch full history to enable searching through commits by time
+        fetch_command = ["git", "fetch", "--unshallow"]
+        fetch_result = subprocess.run(fetch_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=temp_dir)
+        
+        if fetch_result.returncode != 0:
+            sys.exit(f"Error fetching full history from remote repository: {fetch_result.stderr}")
+        
+        # Cache the clone path to reuse it later
+        repo_clone_path = temp_dir
+    
+    # Use `git rev-list` to find the commit before the specified time
+    rev_list_command = ["git", "rev-list", "-n", "1", "--before", target_time_utc, branch]
+    rev_list_result = subprocess.run(rev_list_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=repo_clone_path)
+    
+    if rev_list_result.returncode != 0:
+        sys.exit(f"Error fetching git commit for {date} at {time}: {rev_list_result.stderr}")
+    
+    commit = rev_list_result.stdout.strip()
+
+    # DEBUG
+    # print(f"Found commit {commit} for {date} at {time}")
+    
+    if not commit:
+        sys.exit(f"No commit found for {date} at {time}")
+    
+    return commit, commit[:7]
+
+def get_garden_version_for_date(date, nightly=False):
+    """
+    Generate major and minor version based on the Garden Linux base_date.
+    Logic is taken from `gardenlinux/bin/garden-version`.
+    
+    Major: timestamp divided by the number of seconds in a day.
+    Minor: Incremented by querying the Garden Linux repo for available releases.
+    """
+    # Calculate major version
+    base_date = date.tzinfo.localize(datetime(2020, 3, 31))
+    major = (date - base_date).days
+    
+    # Determine minor version by querying the Garden Linux repository
+    minor = 0
+    if not nightly:
+        while True:
+            url = f"https://repo.gardenlinux.io/gardenlinux/dists/{major}.{minor}/Release"
+            response = requests.get(url)
+            
+            if "The specified key does not exist" in response.text:
+                break
+            
+            minor += 1  # Increment minor version if the release exists
+    # DEBUG
+    # print(f"Minor version for {date} is {major}.{minor}")
+    return f"{major}.{minor}"
+
+def create_releases(releases):
+    """Create stable and patch releases."""
+    release_data = []
+    latest_minor_versions = {}
+
+    releases.sort(key=lambda r: extract_version_data(r['tag_name']))
+
+    for release in releases:
+        tag_name = release.get('tag_name')
+        major, minor = extract_version_data(tag_name)
+        if major is None:
+            continue
+
+        # Determine release type: "patch" if minor exists, otherwise "stable"
+        release_type = "patch" if minor is not None else "stable"
+
+        release_info = {
+            "name": f"release-{tag_name}",
+            "type": release_type,
+            "version": {"major": major},
+            "lifecycle": {
+                "released": {
+                    "isodate": release['published_at'][:10],
+                    "timestamp": isodate_to_timestamp(release['published_at'][:10])
+                },
+                "eol": {
+                    "isodate": None,
+                    "timestamp": None
+                }
+            }
+        }
+
+        # For patch releases, add git and github data
+        if release_type == "patch":
+            commit, commit_short = get_git_commit_from_tag(tag_name)
+            release_info['version']['minor'] = minor
+            release_info['git'] = {
+                "commit": commit,
+                "commit_short": commit_short
+            }
+            release_info['github'] = {
+                "release": release['html_url']
+            }
+
+        if major not in latest_minor_versions or (minor is not None and minor > latest_minor_versions[major]['minor']):
+            latest_minor_versions[major] = {
+                'index': len(release_data),
+                'minor': minor
+            }
+
+        release_data.append(release_info)
+
+    return release_data, latest_minor_versions
+
+def create_nightly_releases(releases, start_date):
+    """Generate nightly releases from the earliest stable release."""
+    release_data = []
+    tz = pytz.timezone('UTC')
+    start_date = tz.localize(start_date)
+    current_date = datetime.now(tz)
+    date = start_date
+
+    while date <= current_date:
+        version = get_garden_version_for_date(date, nightly=True)
+        major, minor = map(int, version.split('.'))
+        commit, commit_short = get_git_commit_at_time(date.strftime('%Y-%m-%d'))
+        nightly_name = f"nightly-{version}"
+        release_info = {
+            "name": nightly_name,
+            "type": "nightly",
+            "version": {"major": major, "minor": minor},
+            "lifecycle": {
+                "released": {"isodate": date.strftime('%Y-%m-%d'), "timestamp": int(date.timestamp())}
+            },
+            "git": {"commit": commit, "commit_short": commit_short}
+        }
+        release_data.append(release_info)
+        date += timedelta(days=1)
+
+    return release_data
+
+def create_single_release(release_type):
+    """Generate a release using the release_type, current timestamp and git info."""
+    # Get the current date and timestamp
+    tz = pytz.timezone('UTC')
+    current_date = tz.localize(datetime.now())
+    isodate = current_date.strftime('%Y-%m-%d')
+    timestamp = int(current_date.timestamp())
+
+    # Get the git commit and short commit
+    commit, commit_short = get_git_commit_at_time(isodate)
+
+    # Get the garden version for the current date
+    version = get_garden_version_for_date(current_date, nightly=False)
+    major, minor = map(int, version.split('.'))
+
+    # Create release data
+    release = {}
+    release['type'] = f"{release_type}"
+    release['version'] = {}
+    release['version']['major'] = major
+    release['lifecycle'] = {}
+    release['lifecycle']['released'] = {}
+    release['lifecycle']['released']['isodate'] = isodate
+    release['lifecycle']['released']['timestamp'] = timestamp
+
+    if release_type in ['dev', 'nightly']:
+        release['name'] = f"{release_type}-{major}.{minor}"
+        release['version']['minor'] = minor
+        release['git'] = {}
+        release['git']['commit'] = commit
+        release['git']['commit_short'] = commit_short
+    elif release_type == "stable":
+        release['name'] = f"{release_type}-{major}"
+        release['lifecycle']['extended'] = {}
+        release['lifecycle']['extended']['isodate'] = None
+        release['lifecycle']['extended']['timestamp'] = None
+        release['lifecycle']['eol'] = {}
+        release['lifecycle']['eol']['isodate'] = None
+        release['lifecycle']['eol']['timestamp'] = None
+    elif release_type == "patch":
+        release['name'] = f"{release_type}-{major}.{minor}"
+        release['version']['minor'] = minor
+        release['lifecycle']['eol'] = {}
+        release['lifecycle']['eol']['isodate'] = None
+        release['lifecycle']['eol']['timestamp'] = None
+        release['git'] = {}
+        release['git']['commit'] = commit
+        release['git']['commit_short'] = commit_short
+        release['github'] = {}
+        release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
+
+    return release
+
+
+def merge_input_data(auto_data, manual_data):
+    """Merge two lists of release data, avoiding duplicates."""
+    # Assuming auto_data and manual_data are both lists
+    merged_data = auto_data[:]  # Start with a copy of auto_data
+
+    # Add releases from manual_data to auto_data if they do not already exist
+    for manual_release in manual_data:
+       # Avoid adding duplicates by checking the 'name' field
+       if not any(auto_release['name'] == manual_release['name'] for auto_release in auto_data):
+           merged_data.append(manual_release)
+
+    return merged_data
+
+
+
+def set_latest_minor_eol_to_major(releases):
+    """Set the EOL of each minor version to the next higher minor version, 
+    and the EOL of the latest minor version to match the stable release."""
+    releases_by_major = {}
+    
+    # Group releases by major version
+    for release in releases:
+        if release.get('type') == 'stable':
+            continue  # Skip stable releases in the initial grouping
+        
+        major = release['version']['major']
+        minor = release.get('version', {}).get('minor')
+        releases_by_major.setdefault(major, []).append(release)
+
+    # For each major version, sort the minor releases and set the EOL
+    for major, minor_releases in releases_by_major.items():
+        # Sort the minor releases by the 'minor' version number
+        minor_releases.sort(key=lambda r: r.get('version', {}).get('minor', 0))
+
+        # Find the corresponding stable release for this major version
+        stable_release = next((r for r in releases if r['version']['major'] == major and r.get('type') == 'stable'), None)
+
+        # Loop through all minor releases
+        for i, release in enumerate(minor_releases):
+            # If it's the last minor release, set its EOL to the stable release's EOL
+            if i == len(minor_releases) - 1:
+                if stable_release:
+                    release['lifecycle']['eol'] = stable_release['lifecycle']['eol']
+                else:
+                    print(f"Warning: No stable release found for major version {major}, skipping EOL update.")
+            else:
+                # Set the EOL to the "released" date of the next minor release
+                next_release = minor_releases[i + 1]
+                release['lifecycle']['eol'] = next_release['lifecycle']['released']
+
+
+
+                
+
+def load_input(filename):
+    """Load manual input from a file if it exists."""
+    input_data = yaml.safe_load(open(filename, 'r')) if os.path.exists(filename) else {}
+    
+    # Ensure we're returning the list of releases from the 'releases' key
+    return input_data.get('releases', [])
+
+
+def load_input_stdin():
+    """Load input from stdin as JSON data."""
+    try:
+        stdin_data = sys.stdin.read()
+        input_data = json.loads(stdin_data)
+        return input_data.get('releases', [])
+    except json.JSONDecodeError as e:
+        sys.exit(f"Error parsing JSON from stdin: {str(e)}")
+    except Exception as e:
+        sys.exit(f"Error reading input from stdin: {str(e)}")
+
+
+def validate_release_data(release):
+    """Validate release data using the appropriate JSON schema."""
+    schema = schemas.get(release['type'])
+    if not schema:
+        sys.exit(f"Unknown release type: {release['type']}")
+    try:
+        validate(instance=release, schema=schema)
+    except ValidationError as e:
+        sys.exit(f"Validation error for release {release['name']}: {e.message}")
+
+def validate_all_releases(releases):
+    """Validate all releases."""
+    for release in releases:
+        validate_release_data(release)
+
+def save_output_file(data, filename, format="yaml"):
+    """Save the data to a file in the specified format."""
+    with open(filename, 'w') as file:
+        if format == 'yaml':
+            yaml.dump(data, file, default_flow_style=False, sort_keys=False)
+        else:
+            # Optimize JSON by removing unnecessary spaces
+            json.dump(data, file, separators=(',', ':'), ensure_ascii=False)            
+
+def create_s3_bucket(bucket_name, region):
+    """Create an S3 bucket in a specified region."""
+    try:
+        s3_client = boto3.client('s3', region_name=region)
+        location = {'LocationConstraint': region}
+        s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration=location)
+        print(f"Bucket '{bucket_name}' created successfully.")
+        s3_client.put_bucket_tagging(
+            Bucket=bucket_name,
+            Tagging={
+                'TagSet': [
+                    {'Key': 'sec-by-def-public-storage-exception', 'Value': 'enabled'},
+                    {'Key': 'sec-by-def-objectversioning-exception', 'Value': 'enabled'},
+                    {'Key': 'sec-by-def-encrypt-storage-exception', 'Value': 'enabled'}
+                ]
+            }
+        )
+        print(f"Tags added to bucket '{bucket_name}'.")
+        s3_client.put_public_access_block(
+            Bucket=bucket_name,
+            PublicAccessBlockConfiguration={
+                'BlockPublicAcls': False,
+                'IgnorePublicAcls': False,
+                'BlockPublicPolicy': False,
+                'RestrictPublicBuckets': False
+            }
+        )
+        print(f"Public access block settings disabled for bucket '{bucket_name}'.")        
+        public_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "PublicReadGetObject",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": f"arn:aws:s3:::{bucket_name}/*"
+                }
+            ]
+        }
+        s3_client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(public_policy))
+        print(f"Bucket '{bucket_name}' made public with a bucket policy.")
+    except ClientError as e:
+        print(f"Error creating bucket: {e}")
+        sys.exit(1)
+
+def upload_to_s3(file_path, bucket_name, bucket_key):
+    """Upload a file to an S3 bucket."""
+    s3_client = boto3.client('s3')
+    try:
+        s3_client.upload_file(file_path, bucket_name, bucket_key)
+    except ClientError as e:
+        print(f"Error uploading {file_path} to S3: {e}")
+        sys.exit(1)
+
+def download_from_s3(bucket_name, bucket_key, local_file):
+    """Download a file from an S3 bucket to a local file."""
+    s3_client = boto3.client('s3')
+    try:
+        s3_client.download_file(bucket_name, bucket_key, local_file)
+    except ClientError as e:
+        # if e.response['Error']['Code'] == 'NoSuchKey':
+        if e.response['Error']['Code'] == '404':
+            print(f"No existing file found at 's3://{bucket_name}/{bucket_key}', starting with a fresh file.")
+            return None  # No existing file, so we return None
+        print(f"Error downloading from S3: {e}")
+        sys.exit(1)
+
+def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
+    """Download, merge, and return the merged data using a temporary file."""
+    # Use a temporary file that will be automatically deleted when closed
+    with tempfile.NamedTemporaryFile(delete=True, mode='w+') as temp_file:
+        # Download existing releases.json from S3 if it exists
+        download_from_s3(bucket_name, bucket_key, temp_file.name)
+
+        # Load existing data if the file was successfully downloaded
+        try:
+            temp_file.seek(0)  # Go to the start of the file to read the contents
+            with open(temp_file.name, 'r') as f:
+                file_contents = f.read()  # Read file contents as a string
+                existing_data = json.loads(file_contents)  # Load JSON from string
+                # Ensure we're working with a list
+                existing_releases = existing_data if isinstance(existing_data, list) else existing_data.get('releases', [])
+        except (json.JSONDecodeError, FileNotFoundError):
+            print("Warning: Could not decode the existing JSON from S3 or no file exists. Starting with a fresh file.")
+            existing_releases = []
+
+        # Ensure new_data is treated as a list
+        new_releases = new_data if isinstance(new_data, list) else new_data.get('releases', [])
+
+        # Use the merge function to merge new and existing releases
+        merged_releases = merge_input_data(new_releases, existing_releases)
+
+        # Return the merged data as a list
+        return merged_releases
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Generate a file of the latest Garden Linux releases in YAML or JSON format.")
+    parser.add_argument('--generate-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,nightly'.")    
+    parser.add_argument('--dev', action='store_true', help="Generate a development release using the current timestamp and git information.")    
+    parser.add_argument('--nightly', action='store_true', help="Generate a nightly release using the current timestamp and git information.")    
+    parser.add_argument('--stable', action='store_true', help="Generate a stable release using the current timestamp and git information.")    
+    parser.add_argument('--patch', action='store_true', help="Generate a patch release using the current timestamp and git information.")    
+    parser.add_argument('--input-stdin', action='store_true', help="Process input from stdin (JSON data).")
+    parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
+    parser.add_argument('--input-file', type=str, default="releases-input.yaml", help="The name of the input file (default: releases-input.yaml).")
+    parser.add_argument('--output-file-prefix', type=str, default="releases", help="The prefix added to the output file (default: releases).")
+    parser.add_argument('--output-format', type=str, choices=['yaml', 'json'], default='json', help="Output format: 'yaml' or 'json' (default: json).")
+    parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
+    parser.add_argument('--s3-bucket-name', type=str, default="gardenlinux-releases", help="Name of S3 bucket. Defaults to 'gardenlinux-releases'.")    
+    parser.add_argument('--s3-bucket-prefix', type=str, default="", help="Prefix inside S3 bucket. Defaults to ''.")    
+    parser.add_argument('--s3-bucket-region', type=str, default="eu-central-1", help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")    
+    parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")    
+    parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")    
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    # Register the cleanup function to be called on script exit
+    atexit.register(cleanup_temp_repo)
+
+    args = parse_arguments()
+
+    if args.s3_create_bucket:
+        create_s3_bucket(args.s3_bucket_name, args.s3_bucket_region)
+
+    if args.s3_update:
+        bucket_name = args.s3_bucket_name
+        bucket_prefix = args.s3_bucket_prefix
+
+    # Parse the --generate-initial-releases argument
+    generate_initial_stable = False
+    generate_initial_nightly = False
+    if args.generate_initial_releases:
+        generate_initial_list = args.generate_initial_releases.split(',')
+        generate_initial_stable = 'stable' in generate_initial_list
+        generate_initial_nightly = 'nightly' in generate_initial_list
+
+    releases = get_github_releases()
+
+    # Variables to store inputs, dev/stable/patch releases and nightly releases
+    dev_releases = []
+    input_releases = []
+    stable_patch_releases = []
+    nightly_releases = []
+    merged_releases = []
+
+    # Create a development release if requested
+    if args.dev:
+        dev_releases = [create_single_release('dev')]
+
+    # Create a nightly release if requested
+    if args.nightly:
+        nightly_releases = [create_single_release('nightly')]
+
+    # Create a stable release if requested
+    if args.stable:
+        stable_patch_releases = stable_patch_releases + [create_single_release('stable')]
+
+    # Create a patch release if requested
+    if args.patch:
+        stable_patch_releases = stable_patch_releases + [create_single_release('patch')]
+
+    # Create initial stable and patch releases if requested
+    if generate_initial_stable:
+        stable_patch_releases, latest_minor_versions = create_releases(releases)
+
+    # Merge all releases into a single list
+    merged_releases = merged_releases + dev_releases + nightly_releases + stable_patch_releases
+
+    # Add stdin input or file input data if provided (existing releases will be overwritten)
+    if args.input_stdin:
+        input_releases = load_input_stdin()
+    elif args.input:
+        input_releases = load_input(args.input_file)
+    merged_releases = merge_input_data(merged_releases, input_releases)
+    # TODO: merge to right release type
+    stable_patch_releases = merge_input_data(stable_patch_releases, input_releases)
+
+    # Ensure timestamps for all releases
+    for release in merged_releases:
+        ensure_isodate_and_timestamp(release['lifecycle'])
+
+    # Set EOL for patch releases based on latest minor versions
+    set_latest_minor_eol_to_major(merged_releases)
+
+    # Generate nightly releases if requested (needs stable releases)
+    if generate_initial_nightly:
+        start_date_default = datetime(2020, 6, 9)
+        if len(stable_patch_releases) > 0:  # If stable/patch releases were generated
+            stable_releases = [r for r in merged_releases if r['type'] == 'stable']
+            if stable_releases:
+                first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
+                start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp'])
+            else:
+                print("No stable releases found in the generated data. Using default start date.")
+                start_date = start_date_default
+        else:
+            print("No stable/patch releases generated. Using default start date.")
+            start_date = start_date_default
+    
+        nightly_releases = create_nightly_releases(stable_patch_releases, start_date)
+        merged_releases = merged_releases + nightly_releases
+
+
+    # Validate all releases
+    validate_all_releases(merged_releases)
+
+    # Save the release data to disk
+    if args.no_output_split:
+        output_file = args.output_file_prefix
+        save_output_file({'releases': merged_releases}, filename=output_file, format=args.output_format)
+
+        # Handle S3 upload if the argument is provided
+        if args.s3_update:
+            merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+            upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")            
+    else:
+        if generate_initial_stable:
+            output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
+            # Handle S3 upload if the argument is provided
+            save_output_file({'releases': stable_patch_releases}, filename=output_file, format=args.output_format)
+            if args.s3_update:
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+        if generate_initial_nightly or args.nightly:
+            output_file = args.output_file_prefix + '-nightly' + '.' + args.output_format
+            save_output_file({'releases': nightly_releases}, filename=output_file, format=args.output_format)
+            # Handle S3 upload if the argument is provided
+            if args.s3_update:
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+        if args.dev:
+            output_file = args.output_file_prefix + '-dev' + '.' + args.output_format
+            save_output_file({'releases': dev_releases}, filename=output_file, format=args.output_format)
+            # Handle S3 upload if the argument is provided
+            if args.s3_update:
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+

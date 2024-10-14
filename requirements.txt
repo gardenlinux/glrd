@@ -1,0 +1,6 @@
+boto3
+jsonschema
+PyYAML
+pytz
+requests
+tabulate

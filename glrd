@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import requests
+from datetime import datetime
+import os
+import yaml
+import tabulate
+
+def load_releases(input_source, is_url=False):
+    """Load the releases from a file or a URL."""
+    if is_url:
+        try:
+            response = requests.get(input_source)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching data from URL: {e}")
+            exit(1)
+    else:
+        if not os.path.exists(input_source):
+            print(f"Error: File {input_source} does not exist.")
+            exit(1)
+        with open(input_source, 'r') as file:
+            return json.load(file)
+
+def get_version_string(version, release_type=None):
+    """Return a version string from a version object. Show major only for stable releases."""
+    if release_type == 'stable':
+        return str(version['major'])  # Stable releases show only major version
+    return f"{version['major']}.{version.get('minor', 0)}"
+
+def get_current_timestamp():
+    """Return the current timestamp."""
+    return int(datetime.now().timestamp())
+
+def is_active_release(release, current_timestamp):
+    """Check if the release is still active based on its EOL timestamp."""
+    eol_timestamp = release.get('lifecycle', {}).get('eol', {}).get('timestamp')
+    return eol_timestamp and eol_timestamp > current_timestamp
+
+def filter_active_releases(releases):
+    """Filter and return only active releases."""
+    current_timestamp = get_current_timestamp()
+    return [release for release in releases if is_active_release(release, current_timestamp)]
+
+def filter_releases(releases, release_types=None, version=None):
+    """Filter releases by type and/or version."""
+    if version:
+        version_parts = version.split('.')
+        major = int(version_parts[0])
+        minor = int(version_parts[1]) if len(version_parts) > 1 else None
+        releases = [
+            r for r in releases
+            if r['version']['major'] == major and (minor is None or r['version'].get('minor', 0) == minor)
+        ]
+    if release_types:
+        release_types = release_types.split(',')
+        releases = [r for r in releases if r.get('type') in release_types]
+    return releases
+
+def find_latest_release(releases):
+    """Find the latest release by version."""
+    return max(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', 0)), default=None)
+
+def format_output(releases, output_type, fields=None, include_extended=False, no_header=False):
+    """Format release data for output."""
+    all_fields = ["Name", "Version", "Type", "Git Commit", "Release date", "Extended maintenance", "End of maintenance"]
+    selected_fields = fields.split(',') if fields else all_fields
+    rows = [
+        [
+            r.get('name', 'N/A'),
+            get_version_string(r['version'], r.get('type')),
+            r.get('type', 'N/A'),
+            r.get('git', {}).get('commit_short', 'N/A'),
+            r['lifecycle']['released'].get('isodate', 'N/A'),
+            get_extended_maintenance(r),
+            r['lifecycle'].get('eol', {}).get('isodate', 'N/A')
+        ]
+        for r in releases
+    ]
+    headers, rows = filter_fields(all_fields, rows, selected_fields)
+    
+    if output_type == 'json':
+        print(json.dumps(releases, indent=2))
+    elif output_type == 'yaml':
+        print(yaml.dump(releases, default_flow_style=False, sort_keys=False))
+    elif output_type == 'markdown':
+        print(tabulate.tabulate(rows, headers, tablefmt="pipe"))
+    elif output_type == 'shell':
+        format_shell(rows, headers, no_header)
+
+def get_extended_maintenance(release):
+    """Return the extended maintenance date for a release, if available."""
+    extended = release['lifecycle'].get('extended', {})
+    if extended.get('isodate'):
+        return extended['isodate']
+    # Default to N/A if extended is missing
+    return 'N/A'
+
+def format_shell(rows, headers, no_header):
+    """Format release data for shell output."""
+    if not no_header:
+        print("\t".join([f"{header:<20}" for header in headers]))
+    for row in rows:
+        # print("\t".join([f"{col:<20}" for col in row]))
+        # print("\t".join([f"{str(col) if col is not None else 'N/A':<20}" for col in row]))
+        print("\t".join([f"{str(col) if col is not None else 'foo':<20}" for col in row]))
+
+def filter_fields(headers, rows, fields):
+    """Filter out the fields based on user input."""
+    selected_indexes = [headers.index(field) for field in fields if field in headers]
+    filtered_headers = [headers[i] for i in selected_indexes]
+    filtered_rows = [[row[i] for i in selected_indexes] for row in rows]
+    return filtered_headers, filtered_rows
+
+def sort_releases(releases):
+    """Sort releases by major and minor version, treating None or 0 minor version specially for stable."""
+    return sorted(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', -1)))
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Process and filter releases data from a file or URL.")
+    
+    parser.add_argument('--input-format', type=str, choices=['yaml', 'json'], default='json', help="Input format: 'yaml' or 'json' (default: json).")
+    parser.add_argument('--input-file-prefix', type=str, default="releases", help="The prefix to get input files (default: releases).")
+    parser.add_argument('--input-type', choices=['file', 'url'], default='url', help="Specify if the input type (default: url).")
+    parser.add_argument('--input-url', type=str, default='https://gardenlinux-releases.s3.eu-central-1.amazonaws.com', help="Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.")
+    parser.add_argument('--no-input-split', action='store_true', help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.")
+    parser.add_argument('--output-type', choices=['json', 'yaml', 'markdown', 'shell'], default='shell', help="Output format: json, yaml, markdown, shell (default).")
+    parser.add_argument('--active', action='store_true', help="Show only active releases.")
+    parser.add_argument('--latest', action='store_true', help="Show the latest active major.minor release.")
+    parser.add_argument('--type', type=str, default='stable,patch', help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev")
+    parser.add_argument('--version', type=str, help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
+    parser.add_argument(
+        '--fields', 
+        type=str, 
+        help=(
+            "Comma-separated list of fields to output. E.g., --fields "
+            "\"Name, Version, Type, Git Commit, Release date, Extended maintenance, End of maintenance\""
+        )
+    )
+    parser.add_argument('--no-header', action='store_true', help="Omit the header in shell output.")
+    
+    return parser.parse_args()
+
+
+def main():
+    args = parse_arguments()
+
+    # Load releases from the specified input (file or URL)
+    if args.no_input_split:
+        releases = load_releases(args.input, is_url=(args.input_type == 'url')).get('releases', [])
+    else:
+        releases_stable_patch = []
+        releases_nightly = []
+        releases_dev = []
+        types = args.type.split(',')
+        is_url = (args.input_type == 'url')
+        if 'stable' in types or 'patch' in types:
+            input_file = args.input_file_prefix + '-stable' + '.' + args.input_format
+            if is_url:
+                input_file = args.input_url + '/' + input_file
+            releases_stable_patch = load_releases(input_file, is_url=is_url).get('releases', [])
+        if 'nightly' in types:
+            input_file = args.input_file_prefix + '-nightly' + '.' + args.input_format
+            if is_url:
+                input_file = args.input_url + '/' + input_file
+            releases_nightly = load_releases(input_file, is_url=is_url).get('releases', [])
+        if 'dev' in types:
+            input_file = args.input_file_prefix + '-dev' + '.' + args.input_format
+            if is_url:
+                input_file = args.input_url + '/' + input_file
+            releases_dev = load_releases(input_file, is_url=is_url).get('releases', [])
+        releases = releases_stable_patch + releases_nightly + releases_dev
+
+    # Filter by version and type
+    releases = filter_releases(releases, release_types=args.type, version=args.version)
+
+    # Show only active releases if specified
+    if args.active:
+        releases = filter_active_releases(releases)
+
+    # Sort releases by major and minor version
+    releases = sort_releases(releases)
+
+    # Find the latest release if requested
+    if args.latest:
+        release = find_latest_release(releases)
+        if release:
+            format_output([release], args.output_type, args.fields, no_header=args.no_header)
+        else:
+            print("No active releases found.")
+    else:
+        # Display all filtered releases
+        format_output(releases, args.output_type, args.fields, no_header=args.no_header)
+
+if __name__ == "__main__":
+    main()
+

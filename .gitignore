@@ -1,0 +1,6 @@
+.envrc
+.venv
+shell.nix
+releases-*.json
+releases-*.yaml
+!releases-input.yaml

@@ -1,0 +1,17 @@
+name: 'GLRD - Garden Linux Release Database'
+description: 'query and create GLRD entries'
+branding:
+  icon: command
+  color: gray-dark
+inputs:
+  cmd:
+    description: 'The Command which should be run'
+    required: true
+outputs:
+  result:
+    description: "The complete result from the glrd command being run"
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/gardenlinux/glcr'
+  args:
+    - ${{ inputs.cmd }}

@@ -1,0 +1,15 @@
+runs:
+  using: composite
+  steps:
+    - name: install podman
+      shell: bash
+      run: |
+        if ! command -v podman; then
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends podman uidmap slirp4netns dbus-user-session
+          id="$(id -u)"
+          sudo systemctl start user@$id
+          export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$id/bus
+          systemctl --user start dbus
+          mkdir -p "$HOME/.config/containers"
+          echo 'unqualified-search-registries = ["docker.io"]' > "$HOME/.config/containers/registries.conf"
+        fi
