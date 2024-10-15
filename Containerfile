@@ -38,3 +38,4 @@ COPY glrd glrd-create releases-input.yaml /usr/local/bin
 # Do not use --system, we want the pip from the virtual env
 RUN cd "$VIRTUAL_ENV_PARENT" && pip install -r requirements.txt
 WORKDIR /usr/local/bin
+ENTRYPOINT ["/usr/bin/sh", "-c"]
