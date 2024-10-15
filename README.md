@@ -30,6 +30,8 @@ For a general overview about Garden Linux releases and their lifecyle, have a lo
 
 The GLRD provides a structured way to store and access release data for Garden Linux, including different release types such as stable, patch, nightly, and development releases. It uses JSON and YAML formats to store release information and supports integration with AWS S3 for storage to host release data..
 
+![Overview](assets/overview.png)
+
 ## Release Schema
 
 The Garden Linux Release Database (GLRD) uses structured JSON schemas to represent different types of releases: **stable**, **patch**, **nightly**, and **development** releases. Each release type has specific fields that capture essential information about the release.
