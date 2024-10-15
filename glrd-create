@@ -175,6 +175,14 @@ def cleanup_temp_repo():
     if repo_clone_path and os.path.exists(repo_clone_path):
         shutil.rmtree(repo_clone_path)
 
+def glrd_query_type(release_type):
+    """Execute glrd command to retrieve releases of a specific type."""
+    command = ["./glrd", "--output-type", "json", "--type", release_type]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        sys.exit(f"Error executing glrd command: {result.stderr}")
+    return json.loads(result.stdout)
+
 def get_git_root():
     """Get the root directory of the current git repository."""
     command = ["git", "rev-parse", "--show-toplevel"]
@@ -453,7 +461,7 @@ def create_single_release(release_type, args):
             sys.exit("Error: Invalid commit hash. Must be 40 characters.")
         commit_short = commit[:7]
     else:
-        commit, commit_short = get_git_commit_at_time(isodate)
+        commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
 
     # Check if a manual version is provided, otherwise use garden version for the date
     if args.version:
@@ -462,7 +470,7 @@ def create_single_release(release_type, args):
         except ValueError:
             sys.exit("Error: Invalid --version format. Use format: major.minor")
     else:
-        version = get_garden_version_for_date(current_date, nightly=False)
+        version = get_garden_version_for_date(release_date, nightly=False)
         major, minor = map(int, version.split('.'))
 
     # Create release data
@@ -712,6 +720,7 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Generate a file of the latest Garden Linux releases in YAML or JSON format.")
+    parser.add_argument('--query', action='store_true', help="Query and use existing releases using glrd command.")
     parser.add_argument('--generate-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,nightly'.")    
     parser.add_argument('--dev', action='store_true', help="Generate a development release using the current timestamp and git information.")    
     parser.add_argument('--nightly', action='store_true', help="Generate a nightly release using the current timestamp and git information.")    
@@ -766,6 +775,13 @@ if __name__ == "__main__":
     nightly_releases = []
     dev_releases = []
     merged_releases = []
+
+    if args.query:
+        # Execute glrd command to fill stable, patch, nightly, and dev releases
+        stable_releases = glrd_query_type("stable")
+        patch_releases = glrd_query_type("patch")
+        nightly_releases = glrd_query_type("nightly")
+        dev_releases = glrd_query_type("dev")
 
     # Create initial stable and patch releases if requested
     if generate_initial_stable or generate_initial_patch:
