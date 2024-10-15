@@ -12,6 +12,6 @@ outputs:
     description: "The complete result from the glrd command being run"
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/gardenlinux/glcr'
+  image: 'docker://ghcr.io/gardenlinux/glrd'
   args:
     - ${{ inputs.cmd }}

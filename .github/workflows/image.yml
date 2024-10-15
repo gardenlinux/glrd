@@ -46,8 +46,9 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      ## needed for cross-compilation via qemu
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v3
       - uses: ./.github/actions/setup
       - name: download build-amd64
         uses: actions/download-artifact@v4
