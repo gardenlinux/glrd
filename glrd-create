@@ -331,6 +331,8 @@ def create_releases(releases):
 
         # Determine release type: "patch" if minor exists, otherwise "stable"
         release_type = "patch" if minor is not None else "stable"
+        # DEBUG
+        # print(f"Processing {release_type} release: {tag_name}")
 
         release_info = {
             "name": f"release-{tag_name}",
@@ -369,14 +371,20 @@ def create_releases(releases):
                 'minor': minor
             }
 
-        # release_data.append(release_info)
-
-    # return release_data, release_data_stable, release_data_patch, latest_minor_versions
     return release_data_stable, release_data_patch, latest_minor_versions
 
-def create_nightly_releases(releases, start_date):
+def create_nightly_releases(stable_releases):
     """Generate nightly releases from the earliest stable release."""
     release_data = []
+
+    start_date_default = datetime(2020, 6, 9)
+    if len(stable_releases) > 0:  # If stable/patch releases were generated
+        first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
+        start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp'])
+    else:
+        print("No stable releases found in the generated data. Using default start date.")
+        start_date = start_date_default
+    
     tz = pytz.timezone('UTC')
     start_date = tz.localize(start_date)
     current_date = datetime.now(tz)
@@ -401,20 +409,61 @@ def create_nightly_releases(releases, start_date):
 
     return release_data
 
-def create_single_release(release_type):
-    """Generate a release using the release_type, current timestamp and git info."""
-    # Get the current date and timestamp
-    tz = pytz.timezone('UTC')
-    current_date = tz.localize(datetime.now())
-    isodate = current_date.strftime('%Y-%m-%d')
-    timestamp = int(current_date.timestamp())
+def create_single_release(release_type, args):
+    """Generate a release using the release_type, current timestamp and git info, or using provided arguments."""
+    # Check if a manual date-time-released is provided, otherwise use the current date
+    if args.date_time_released:
+        try:
+            release_date = datetime.strptime(args.date_time_released, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+        except ValueError:
+            sys.exit("Error: Invalid --date-time-release format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
+    else:
+        tz = pytz.timezone('UTC')
+        release_date = tz.localize(datetime.now())
+    
+    lifecycle_released_isodate = release_date.strftime('%Y-%m-%d')
+    lifecycle_released_timestamp = int(release_date.timestamp())
 
-    # Get the git commit and short commit
-    commit, commit_short = get_git_commit_at_time(isodate)
+    if args.date_time_extended:
+        try:
+            extended_date = datetime.strptime(args.date_time_released, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            lifecycle_extended_isodate = extended_date.strftime('%Y-%m-%d')
+            lifecycle_extended_timestamp = int(extended_date.timestamp())
+        except ValueError:
+            sys.exit("Error: Invalid --date-time-extended format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
+    else:
+        lifecycle_extended_isodate = None
+        lifecycle_extended_timestamp = None
 
-    # Get the garden version for the current date
-    version = get_garden_version_for_date(current_date, nightly=False)
-    major, minor = map(int, version.split('.'))
+    if args.date_time_eol:
+        try:
+            eol_date = datetime.strptime(args.date_time_released, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            lifecycle_eol_isodate = eol_date.strftime('%Y-%m-%d')
+            lifecycle_eol_timestamp = int(eol_date.timestamp())
+        except ValueError:
+            sys.exit("Error: Invalid --date-time-eol format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
+    else:
+        lifecycle_eol_isodate = None
+        lifecycle_eol_timestamp = None
+
+    # Check if a manual commit is provided, otherwise use git commit at the given time
+    if args.commit:
+        commit = args.commit
+        if len(commit) != 40:
+            sys.exit("Error: Invalid commit hash. Must be 40 characters.")
+        commit_short = commit[:7]
+    else:
+        commit, commit_short = get_git_commit_at_time(isodate)
+
+    # Check if a manual version is provided, otherwise use garden version for the date
+    if args.version:
+        try:
+            major, minor = map(int, args.version.split('.'))
+        except ValueError:
+            sys.exit("Error: Invalid --version format. Use format: major.minor")
+    else:
+        version = get_garden_version_for_date(current_date, nightly=False)
+        major, minor = map(int, version.split('.'))
 
     # Create release data
     release = {}
@@ -423,8 +472,8 @@ def create_single_release(release_type):
     release['version']['major'] = major
     release['lifecycle'] = {}
     release['lifecycle']['released'] = {}
-    release['lifecycle']['released']['isodate'] = isodate
-    release['lifecycle']['released']['timestamp'] = timestamp
+    release['lifecycle']['released']['isodate'] = lifecycle_released_isodate
+    release['lifecycle']['released']['timestamp'] = lifecycle_released_timestamp
 
     if release_type in ['dev', 'nightly']:
         release['name'] = f"{release_type}-{major}.{minor}"
@@ -435,17 +484,17 @@ def create_single_release(release_type):
     elif release_type == "stable":
         release['name'] = f"{release_type}-{major}"
         release['lifecycle']['extended'] = {}
-        release['lifecycle']['extended']['isodate'] = None
-        release['lifecycle']['extended']['timestamp'] = None
+        release['lifecycle']['extended']['isodate'] = lifecycle_extended_isodate
+        release['lifecycle']['extended']['timestamp'] = lifecycle_extended_timestamp
         release['lifecycle']['eol'] = {}
-        release['lifecycle']['eol']['isodate'] = None
-        release['lifecycle']['eol']['timestamp'] = None
+        release['lifecycle']['eol']['isodate'] = lifecycle_eol_isodate
+        release['lifecycle']['eol']['timestamp'] = lifecycle_eol_timestamp
     elif release_type == "patch":
         release['name'] = f"{release_type}-{major}.{minor}"
         release['version']['minor'] = minor
         release['lifecycle']['eol'] = {}
-        release['lifecycle']['eol']['isodate'] = None
-        release['lifecycle']['eol']['timestamp'] = None
+        release['lifecycle']['eol']['isodate'] = lifecycle_eol_isodate
+        release['lifecycle']['eol']['timestamp'] = lifecycle_eol_timestamp
         release['git'] = {}
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
@@ -453,7 +502,6 @@ def create_single_release(release_type):
         release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
 
     return release
-
 
 def merge_input_data(auto_data, manual_data):
     """Merge two lists of release data, avoiding duplicates."""
@@ -470,16 +518,13 @@ def merge_input_data(auto_data, manual_data):
 
 
 
-def set_latest_minor_eol_to_major(releases):
+def set_latest_minor_eol_to_major(stable_releases, patch_releases):
     """Set the EOL of each minor version to the next higher minor version, 
     and the EOL of the latest minor version to match the stable release."""
     releases_by_major = {}
-    
+
     # Group releases by major version
-    for release in releases:
-        if release.get('type') == 'stable':
-            continue  # Skip stable releases in the initial grouping
-        
+    for release in patch_releases:
         major = release['version']['major']
         minor = release.get('version', {}).get('minor')
         releases_by_major.setdefault(major, []).append(release)
@@ -490,7 +535,7 @@ def set_latest_minor_eol_to_major(releases):
         minor_releases.sort(key=lambda r: r.get('version', {}).get('minor', 0))
 
         # Find the corresponding stable release for this major version
-        stable_release = next((r for r in releases if r['version']['major'] == major and r.get('type') == 'stable'), None)
+        stable_release = next((r for r in stable_releases if r['version']['major'] == major), None)
 
         # Loop through all minor releases
         for i, release in enumerate(minor_releases):
@@ -504,10 +549,6 @@ def set_latest_minor_eol_to_major(releases):
                 # Set the EOL to the "released" date of the next minor release
                 next_release = minor_releases[i + 1]
                 release['lifecycle']['eol'] = next_release['lifecycle']['released']
-
-
-
-                
 
 def load_input(filename):
     """Load manual input from a file if it exists."""
@@ -676,6 +717,11 @@ def parse_arguments():
     parser.add_argument('--nightly', action='store_true', help="Generate a nightly release using the current timestamp and git information.")    
     parser.add_argument('--stable', action='store_true', help="Generate a stable release using the current timestamp and git information.")    
     parser.add_argument('--patch', action='store_true', help="Generate a patch release using the current timestamp and git information.")    
+    parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
+    parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
+    parser.add_argument('--date-time-released', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
+    parser.add_argument('--date-time-extended', type=str, help="Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
+    parser.add_argument('--date-time-eol', type=str, help="Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument('--input-stdin', action='store_true', help="Process a single input from stdin (JSON data).")
     parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
     parser.add_argument('--input-file', type=str, default="releases-input.yaml", help="The name of the input file (default: releases-input.yaml).")
@@ -715,48 +761,15 @@ if __name__ == "__main__":
     releases = get_github_releases()
 
     # Variables to store inputs, dev/stable/patch releases and nightly releases
-    dev_releases = []
-    input_releases = []
     stable_releases = []
     patch_releases = []
     nightly_releases = []
+    dev_releases = []
     merged_releases = []
-
-    # Create a development release if requested
-    if args.dev:
-        dev_releases = [create_single_release('dev')]
-
-    # Create a nightly release if requested
-    if args.nightly:
-        nightly_releases = [create_single_release('nightly')]
-
-    # Create a stable release if requested
-    if args.stable:
-        stable_releases = [create_single_release('stable')]
-
-    # Create a patch release if requested
-    if args.patch:
-        patch_releases = [create_single_release('patch')]
 
     # Create initial stable and patch releases if requested
     if generate_initial_stable or generate_initial_patch:
         stable_releases, patch_releases, latest_minor_versions = create_releases(releases)
-
-    # Merge all releases into a single list
-    merged_releases = merged_releases + dev_releases + nightly_releases + stable_releases + patch_releases
-
-    # Ensure timestamps for all releases
-    for release in merged_releases:
-        ensure_isodate_and_timestamp(release['lifecycle'])
-
-    # Set EOL for patch releases based on latest minor versions
-    set_latest_minor_eol_to_major(merged_releases)
-
-    # split all releases again
-    stable_releases = [r for r in merged_releases if r['type'] == 'stable']
-    patch_releases = [r for r in merged_releases if r['type'] == 'patch']
-    nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
-    dev_releases = [r for r in merged_releases if r['type'] == 'dev']
 
     # Add stdin input or file input data if provided (existing releases will be overwritten)
     if args.input_stdin or args.input:
@@ -769,26 +782,45 @@ if __name__ == "__main__":
         nightly_releases = merge_input_data(nightly_releases, input_nightly)
         dev_releases = merge_input_data(dev_releases, input_dev)
 
+    # we define stable releases in input file, therefore this has to be run past defining inputs
     # Generate nightly releases if requested (needs stable releases)
     if generate_initial_nightly:
-        start_date_default = datetime(2020, 6, 9)
-        if len(stable_releases) > 0:  # If stable/patch releases were generated
-            if stable_releases:
-                first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
-                start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp'])
-            else:
-                print("No stable releases found in the generated data. Using default start date.")
-                start_date = start_date_default
-        else:
-            print("No stable/patch releases generated. Using default start date.")
-            start_date = start_date_default
-    
-        nightly_releases = create_nightly_releases(stable_releases, start_date)
-        merged_releases = merged_releases + nightly_releases
+        nightly_releases = create_nightly_releases(stable_releases)
 
+    # Create a development release if requested
+    if args.dev:
+        dev_releases = dev_releases + [create_single_release('dev', args)]
+
+    # Create a nightly release if requested
+    if args.nightly:
+        nightly_releases = nightly_releases + [create_single_release('nightly', args)]
+
+    # Create a stable release if requested
+    if args.stable:
+        stable_releases = stable_releases + [create_single_release('stable', args)]
+
+    # Create a patch release if requested
+    if args.patch:
+        patch_releases = patch_releases + [create_single_release('patch', args)]
+
+    # Set EOL for patch releases based on latest minor versions
+    set_latest_minor_eol_to_major(stable_releases, patch_releases)
+
+    # Merge all releases into a single list
+    merged_releases = stable_releases + patch_releases + nightly_releases + dev_releases
+
+    # Ensure timestamps for all releases
+    for release in merged_releases:
+        ensure_isodate_and_timestamp(release['lifecycle'])
 
     # Validate all releases
     validate_all_releases(merged_releases)
+
+    # split all releases again
+    stable_releases = [r for r in merged_releases if r['type'] == 'stable']
+    patch_releases = [r for r in merged_releases if r['type'] == 'patch']
+    nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
+    dev_releases = [r for r in merged_releases if r['type'] == 'dev']
 
     # Save the release data to disk
     if args.no_output_split:
