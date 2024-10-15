@@ -24,7 +24,7 @@ This repository contains these tools:
 
 ## Garden Linux Releases
 
-For a general overview about Garden Linux releases and their lifecyle, have a look at the [Garden Linux Release Plan Overview](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md).
+For a general overview about Garden Linux releases and their lifecycle, have a look at the [Garden Linux Release Plan Overview](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md).
 
 ## Overview
 
@@ -59,7 +59,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 ### Patch Releases
 
-[Patch Releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#patches) are updates delivered during the standard and extended mainteannce periods of [Stable releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#stable-releases).
+[Patch Releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#patches) are updates delivered during the standard and extended mainteance periods of [Stable releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#stable-releases).
 
 #### Schema Fields
 
@@ -148,7 +148,7 @@ For example:
 
 In this example, the `eol` of `release-1312.1` is set to the `released` date of `release-1312.2`, and the `eol` of the latest patch release (`release-1312.7`) is set to the `eol` of the stable release (`release-1312`).
 
-Please note that the `extended` lifecyle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
+Please note that the `extended` lifecycle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
 
 
 ## Prerequisites
