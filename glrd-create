@@ -511,10 +511,21 @@ def set_latest_minor_eol_to_major(releases):
 
 def load_input(filename):
     """Load manual input from a file if it exists."""
-    input_data = yaml.safe_load(open(filename, 'r')) if os.path.exists(filename) else {}
-    
-    # Ensure we're returning the list of releases from the 'releases' key
-    return input_data.get('releases', [])
+    try:
+        input_data = yaml.safe_load(open(filename, 'r'))
+        
+        merged_releases = input_data.get('releases', [])
+        if len(merged_releases) == 0:
+            sys.exit(f"Error, no releases found in JSON from file")
+        stable_releases = [r for r in merged_releases if r['type'] == 'stable']
+        patch_releases = [r for r in merged_releases if r['type'] == 'patch']
+        nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
+        dev_releases = [r for r in merged_releases if r['type'] == 'dev']
+        return stable_releases, patch_releases, nightly_releases, dev_releases
+    except json.JSONDecodeError as e:
+        sys.exit(f"Error parsing JSON from file: {str(e)}")
+    except Exception as e:
+        sys.exit(f"Error reading input from file: {str(e)}")
 
 
 def load_input_stdin():
@@ -522,7 +533,15 @@ def load_input_stdin():
     try:
         stdin_data = sys.stdin.read()
         input_data = json.loads(stdin_data)
-        return input_data.get('releases', [])
+
+        merged_releases = input_data.get('releases', [])
+        if len(merged_releases) == 0:
+            sys.exit(f"Error, no releases found in JSON from stdin")
+        stable_releases = [r for r in merged_releases if r['type'] == 'stable']
+        patch_releases = [r for r in merged_releases if r['type'] == 'patch']
+        nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
+        dev_releases = [r for r in merged_releases if r['type'] == 'dev']
+        return stable_releases, patch_releases, nightly_releases, dev_releases
     except json.JSONDecodeError as e:
         sys.exit(f"Error parsing JSON from stdin: {str(e)}")
     except Exception as e:
@@ -740,14 +759,15 @@ if __name__ == "__main__":
     dev_releases = [r for r in merged_releases if r['type'] == 'dev']
 
     # Add stdin input or file input data if provided (existing releases will be overwritten)
-    if args.input_stdin:
-        input_releases = load_input_stdin()
-    elif args.input:
-        input_releases = load_input(args.input_file)
-    stable_releases = merge_input_data(stable_releases, input_releases)
-    patch_releases = merge_input_data(patch_releases, input_releases)
-    nightly_releases = merge_input_data(nightly_releases, input_releases)
-    dev_releases = merge_input_data(dev_releases, input_releases)
+    if args.input_stdin or args.input:
+        if args.input_stdin:
+            input_stable, input_patch, input_nightly, input_dev = load_input_stdin()
+        elif args.input:
+            input_stable, input_patch, input_nightly, input_dev = load_input(args.input_file)
+        stable_releases = merge_input_data(stable_releases, input_stable)
+        patch_releases = merge_input_data(patch_releases, input_patch)
+        nightly_releases = merge_input_data(nightly_releases, input_nightly)
+        dev_releases = merge_input_data(dev_releases, input_dev)
 
     # Generate nightly releases if requested (needs stable releases)
     if generate_initial_nightly:
@@ -780,39 +800,32 @@ if __name__ == "__main__":
             merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
             upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")            
     else:
-        if args.input or args.input_stdin:
+        if len(stable_releases) > 0:
             output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
             save_output_file({'releases': stable_releases}, filename=output_file, format=args.output_format)
             if args.s3_update:
-                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, stable_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if generate_initial_stable or args.stable:
-            output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
-            # Handle S3 upload if the argument is provided
-            save_output_file({'releases': stable_releases}, filename=output_file, format=args.output_format)
-            if args.s3_update:
-                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
-                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if generate_initial_patch or args.patch:
+        if len(patch_releases) > 0:
             output_file = args.output_file_prefix + '-patch' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
             save_output_file({'releases': patch_releases}, filename=output_file, format=args.output_format)
             if args.s3_update:
-                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, patch_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if generate_initial_nightly or args.nightly:
+        if len(nightly_releases) > 0:
             output_file = args.output_file_prefix + '-nightly' + '.' + args.output_format
             save_output_file({'releases': nightly_releases}, filename=output_file, format=args.output_format)
             # Handle S3 upload if the argument is provided
             if args.s3_update:
-                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, nightly_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if args.dev:
+        if len(dev_releases) > 0:
             output_file = args.output_file_prefix + '-dev' + '.' + args.output_format
             save_output_file({'releases': dev_releases}, filename=output_file, format=args.output_format)
             # Handle S3 upload if the argument is provided
             if args.s3_update:
-                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, dev_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
 
