@@ -153,16 +153,22 @@ def main():
     if args.no_input_split:
         releases = load_releases(args.input, is_url=(args.input_type == 'url')).get('releases', [])
     else:
-        releases_stable_patch = []
+        releases_stable = []
+        releases_patch = []
         releases_nightly = []
         releases_dev = []
         types = args.type.split(',')
         is_url = (args.input_type == 'url')
-        if 'stable' in types or 'patch' in types:
+        if 'stable' in types:
             input_file = args.input_file_prefix + '-stable' + '.' + args.input_format
             if is_url:
                 input_file = args.input_url + '/' + input_file
-            releases_stable_patch = load_releases(input_file, is_url=is_url).get('releases', [])
+            releases_stable = load_releases(input_file, is_url=is_url).get('releases', [])
+        if 'patch' in types:
+            input_file = args.input_file_prefix + '-patch' + '.' + args.input_format
+            if is_url:
+                input_file = args.input_url + '/' + input_file
+            releases_patch = load_releases(input_file, is_url=is_url).get('releases', [])
         if 'nightly' in types:
             input_file = args.input_file_prefix + '-nightly' + '.' + args.input_format
             if is_url:
@@ -173,7 +179,7 @@ def main():
             if is_url:
                 input_file = args.input_url + '/' + input_file
             releases_dev = load_releases(input_file, is_url=is_url).get('releases', [])
-        releases = releases_stable_patch + releases_nightly + releases_dev
+        releases = releases_stable + releases_patch + releases_nightly + releases_dev
 
     # Filter by version and type
     releases = filter_releases(releases, release_types=args.type, version=args.version)

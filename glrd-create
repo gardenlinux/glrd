@@ -317,6 +317,8 @@ def get_garden_version_for_date(date, nightly=False):
 def create_releases(releases):
     """Create stable and patch releases."""
     release_data = []
+    release_data_stable = []
+    release_data_patch = []
     latest_minor_versions = {}
 
     releases.sort(key=lambda r: extract_version_data(r['tag_name']))
@@ -345,6 +347,8 @@ def create_releases(releases):
                 }
             }
         }
+        if release_type == "stable":
+            release_data_stable.append(release_info)
 
         # For patch releases, add git and github data
         if release_type == "patch":
@@ -357,6 +361,7 @@ def create_releases(releases):
             release_info['github'] = {
                 "release": release['html_url']
             }
+            release_data_patch.append(release_info)
 
         if major not in latest_minor_versions or (minor is not None and minor > latest_minor_versions[major]['minor']):
             latest_minor_versions[major] = {
@@ -364,9 +369,10 @@ def create_releases(releases):
                 'minor': minor
             }
 
-        release_data.append(release_info)
+        # release_data.append(release_info)
 
-    return release_data, latest_minor_versions
+    # return release_data, release_data_stable, release_data_patch, latest_minor_versions
+    return release_data_stable, release_data_patch, latest_minor_versions
 
 def create_nightly_releases(releases, start_date):
     """Generate nightly releases from the earliest stable release."""
@@ -651,7 +657,7 @@ def parse_arguments():
     parser.add_argument('--nightly', action='store_true', help="Generate a nightly release using the current timestamp and git information.")    
     parser.add_argument('--stable', action='store_true', help="Generate a stable release using the current timestamp and git information.")    
     parser.add_argument('--patch', action='store_true', help="Generate a patch release using the current timestamp and git information.")    
-    parser.add_argument('--input-stdin', action='store_true', help="Process input from stdin (JSON data).")
+    parser.add_argument('--input-stdin', action='store_true', help="Process a single input from stdin (JSON data).")
     parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
     parser.add_argument('--input-file', type=str, default="releases-input.yaml", help="The name of the input file (default: releases-input.yaml).")
     parser.add_argument('--output-file-prefix', type=str, default="releases", help="The prefix added to the output file (default: releases).")
@@ -679,10 +685,12 @@ if __name__ == "__main__":
 
     # Parse the --generate-initial-releases argument
     generate_initial_stable = False
+    generate_initial_patch = False
     generate_initial_nightly = False
     if args.generate_initial_releases:
         generate_initial_list = args.generate_initial_releases.split(',')
         generate_initial_stable = 'stable' in generate_initial_list
+        generate_initial_patch = 'patch' in generate_initial_list
         generate_initial_nightly = 'nightly' in generate_initial_list
 
     releases = get_github_releases()
@@ -690,7 +698,8 @@ if __name__ == "__main__":
     # Variables to store inputs, dev/stable/patch releases and nightly releases
     dev_releases = []
     input_releases = []
-    stable_patch_releases = []
+    stable_releases = []
+    patch_releases = []
     nightly_releases = []
     merged_releases = []
 
@@ -704,27 +713,18 @@ if __name__ == "__main__":
 
     # Create a stable release if requested
     if args.stable:
-        stable_patch_releases = stable_patch_releases + [create_single_release('stable')]
+        stable_releases = [create_single_release('stable')]
 
     # Create a patch release if requested
     if args.patch:
-        stable_patch_releases = stable_patch_releases + [create_single_release('patch')]
+        patch_releases = [create_single_release('patch')]
 
     # Create initial stable and patch releases if requested
-    if generate_initial_stable:
-        stable_patch_releases, latest_minor_versions = create_releases(releases)
+    if generate_initial_stable or generate_initial_patch:
+        stable_releases, patch_releases, latest_minor_versions = create_releases(releases)
 
     # Merge all releases into a single list
-    merged_releases = merged_releases + dev_releases + nightly_releases + stable_patch_releases
-
-    # Add stdin input or file input data if provided (existing releases will be overwritten)
-    if args.input_stdin:
-        input_releases = load_input_stdin()
-    elif args.input:
-        input_releases = load_input(args.input_file)
-    merged_releases = merge_input_data(merged_releases, input_releases)
-    # TODO: merge to right release type
-    stable_patch_releases = merge_input_data(stable_patch_releases, input_releases)
+    merged_releases = merged_releases + dev_releases + nightly_releases + stable_releases + patch_releases
 
     # Ensure timestamps for all releases
     for release in merged_releases:
@@ -733,11 +733,26 @@ if __name__ == "__main__":
     # Set EOL for patch releases based on latest minor versions
     set_latest_minor_eol_to_major(merged_releases)
 
+    # split all releases again
+    stable_releases = [r for r in merged_releases if r['type'] == 'stable']
+    patch_releases = [r for r in merged_releases if r['type'] == 'patch']
+    nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
+    dev_releases = [r for r in merged_releases if r['type'] == 'dev']
+
+    # Add stdin input or file input data if provided (existing releases will be overwritten)
+    if args.input_stdin:
+        input_releases = load_input_stdin()
+    elif args.input:
+        input_releases = load_input(args.input_file)
+    stable_releases = merge_input_data(stable_releases, input_releases)
+    patch_releases = merge_input_data(patch_releases, input_releases)
+    nightly_releases = merge_input_data(nightly_releases, input_releases)
+    dev_releases = merge_input_data(dev_releases, input_releases)
+
     # Generate nightly releases if requested (needs stable releases)
     if generate_initial_nightly:
         start_date_default = datetime(2020, 6, 9)
-        if len(stable_patch_releases) > 0:  # If stable/patch releases were generated
-            stable_releases = [r for r in merged_releases if r['type'] == 'stable']
+        if len(stable_releases) > 0:  # If stable/patch releases were generated
             if stable_releases:
                 first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
                 start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp'])
@@ -748,7 +763,7 @@ if __name__ == "__main__":
             print("No stable/patch releases generated. Using default start date.")
             start_date = start_date_default
     
-        nightly_releases = create_nightly_releases(stable_patch_releases, start_date)
+        nightly_releases = create_nightly_releases(stable_releases, start_date)
         merged_releases = merged_releases + nightly_releases
 
 
@@ -765,10 +780,24 @@ if __name__ == "__main__":
             merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
             upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")            
     else:
-        if generate_initial_stable:
+        if args.input or args.input_stdin:
             output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
-            save_output_file({'releases': stable_patch_releases}, filename=output_file, format=args.output_format)
+            save_output_file({'releases': stable_releases}, filename=output_file, format=args.output_format)
+            if args.s3_update:
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+        if generate_initial_stable or args.stable:
+            output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
+            # Handle S3 upload if the argument is provided
+            save_output_file({'releases': stable_releases}, filename=output_file, format=args.output_format)
+            if args.s3_update:
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
+                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+        if generate_initial_patch or args.patch:
+            output_file = args.output_file_prefix + '-patch' + '.' + args.output_format
+            # Handle S3 upload if the argument is provided
+            save_output_file({'releases': patch_releases}, filename=output_file, format=args.output_format)
             if args.s3_update:
                 merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
