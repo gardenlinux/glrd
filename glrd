@@ -45,6 +45,16 @@ def filter_active_releases(releases):
     current_timestamp = get_current_timestamp()
     return [release for release in releases if is_active_release(release, current_timestamp)]
 
+def is_archived_release(release, current_timestamp):
+    """Check if the release archived based on its EOL timestamp."""
+    eol_timestamp = release.get('lifecycle', {}).get('eol', {}).get('timestamp')
+    return eol_timestamp and eol_timestamp < current_timestamp
+
+def filter_archived_releases(releases):
+    """Filter and return only archived releases."""
+    current_timestamp = get_current_timestamp()
+    return [release for release in releases if is_archived_release(release, current_timestamp)]
+
 def filter_releases(releases, release_types=None, version=None):
     """Filter releases by type and/or version."""
     if version:
@@ -208,6 +218,7 @@ def parse_arguments():
     parser.add_argument('--output-type', choices=['json', 'yaml', 'markdown', 'mermaid_gantt', 'shell'], default='shell', help="Output format: json, yaml, markdown, mermaid_gantt, shell (default).")
     parser.add_argument('--output-description', type=str, default='Garden Linux Releases', help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
     parser.add_argument('--active', action='store_true', help="Show only active releases.")
+    parser.add_argument('--archived', action='store_true', help="Show only archived releases.")
     parser.add_argument('--latest', action='store_true', help="Show the latest active major.minor release.")
     parser.add_argument('--type', type=str, default='stable,patch', help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
     parser.add_argument('--version', type=str, help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
@@ -271,6 +282,10 @@ def main():
     # Show only active releases if specified
     if args.active:
         releases = filter_active_releases(releases)
+
+    # Show only archived releases if specified
+    if args.archived:
+        releases = filter_archived_releases(releases)
 
     # Sort releases by major and minor version
     releases = sort_releases(releases)
