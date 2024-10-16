@@ -39,15 +39,15 @@ schemas = {
                     "extended": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string", "null"], "format": "date"},
-                            "timestamp": {"type": ["integer", "null"]}
+                            "isodate": {"type": ["string"], "format": "date"},
+                            "timestamp": {"type": ["integer"]}
                         }
                     },
                     "eol": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string", "null"], "format": "date"},
-                            "timestamp": {"type": ["integer", "null"]}
+                            "isodate": {"type": ["string"], "format": "date"},
+                            "timestamp": {"type": ["integer"]}
                         }
                     }
                 },
@@ -79,8 +79,8 @@ schemas = {
                     "eol": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string", "null"], "format": "date"},
-                            "timestamp": {"type": ["integer", "null"]}
+                            "isodate": {"type": ["string"], "format": "date"},
+                            "timestamp": {"type": ["integer"]}
                         }
                     }
                 },
@@ -295,7 +295,7 @@ def get_git_commit_at_time(date, time="08:00", branch="main", remote_repo="https
     
     return commit, commit[:7]
 
-def get_garden_version_for_date(date, nightly=False):
+def get_garden_version_for_date(args, date, existing_releases):
     """
     Create major and minor version based on the Garden Linux base_date.
     Logic is taken from `gardenlinux/bin/garden-version`.
@@ -306,20 +306,21 @@ def get_garden_version_for_date(date, nightly=False):
     # Calculate major version
     base_date = date.tzinfo.localize(datetime(2020, 3, 31))
     major = (date - base_date).days
+
+    # Determine minor version by checking existing releases
+    existing_minor_versions = [
+        release['version'].get('minor', -1)
+        for release in existing_releases
+        if release['type'] == args.type and release['version']['major'] == major
+    ]
+    print(existing_minor_versions)
+    if existing_minor_versions:
+        minor = max(existing_minor_versions) + 1
+    else:
+        minor = 0
     
-    # Determine minor version by querying the Garden Linux repository
-    minor = 0
-    if not nightly:
-        while True:
-            url = f"https://repo.gardenlinux.io/gardenlinux/dists/{major}.{minor}/Release"
-            response = requests.get(url)
-            
-            if "The specified key does not exist" in response.text:
-                break
-            
-            minor += 1  # Increment minor version if the release exists
     # DEBUG
-    # print(f"Minor version for {date} is {major}.{minor}")
+    print(f"Minor version for {date} is {major}.{minor}")
     return f"{major}.{minor}"
 
 def create_initial_releases(releases):
@@ -417,7 +418,7 @@ def create_initial_nightly_releases(stable_releases):
 
     return release_data
 
-def create_single_release(release_type, args):
+def create_single_release(release_type, args, existing_releases):
     """Generate a release using the release_type, current timestamp and git info, or using provided arguments."""
     # Check if a manual date-time-released is provided, otherwise use the current date
     if args.date_time_released:
@@ -470,7 +471,8 @@ def create_single_release(release_type, args):
         except ValueError:
             sys.exit("Error: Invalid --version format. Use format: major.minor")
     else:
-        version = get_garden_version_for_date(release_date, nightly=False)
+        # version = get_garden_version_for_date(release_date, nightly=False)
+        version = get_garden_version_for_date(args, release_date, existing_releases)
         major, minor = map(int, version.split('.'))
 
     # Create release data
@@ -656,7 +658,9 @@ def validate_release_data(release):
     try:
         validate(instance=release, schema=schema)
     except ValidationError as e:
-        sys.exit(f"Validation error for release {release['name']}: {e.message}")
+        # Construct the field path that caused the validation error
+        field_path = '.'.join([str(p) for p in e.absolute_path])
+        sys.exit(f"Validation error for release {release['name']} at '{field_path}': {e.message}")
 
 def validate_all_releases(releases):
     """Validate all releases."""
@@ -866,19 +870,19 @@ if __name__ == "__main__":
 
         # Create a development release if requested
         if args.type == 'dev':
-            dev_releases = dev_releases + [create_single_release('dev', args)]
+            dev_releases = dev_releases + [create_single_release('dev', args, dev_releases)]
 
         # Create a nightly release if requested
         if args.type == 'nightly':
-            nightly_releases = nightly_releases + [create_single_release('nightly', args)]
+            nightly_releases = nightly_releases + [create_single_release('nightly', args, dev_releases)]
 
         # Create a stable release if requested
         if args.type == 'stable':
-            stable_releases = stable_releases + [create_single_release('stable', args)]
+            stable_releases = stable_releases + [create_single_release('stable', args, stable_releases)]
 
         # Create a patch release if requested
         if args.type == 'patch':
-            patch_releases = patch_releases + [create_single_release('patch', args)]
+            patch_releases = patch_releases + [create_single_release('patch', args, patch_releases)]
 
     # Set EOL for patch releases based on latest minor versions
     set_latest_minor_eol_to_major(stable_releases, patch_releases)
