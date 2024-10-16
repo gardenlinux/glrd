@@ -322,8 +322,8 @@ def get_garden_version_for_date(date, nightly=False):
     # print(f"Minor version for {date} is {major}.{minor}")
     return f"{major}.{minor}"
 
-def create_releases(releases):
-    """Create stable and patch releases."""
+def create_initial_releases(releases):
+    """Generate initial stable and patch releases."""
     release_data = []
     release_data_stable = []
     release_data_patch = []
@@ -381,8 +381,8 @@ def create_releases(releases):
 
     return release_data_stable, release_data_patch, latest_minor_versions
 
-def create_nightly_releases(stable_releases):
-    """Generate nightly releases from the earliest stable release."""
+def create_initial_nightly_releases(stable_releases):
+    """Generate initial nightly releases from the earliest stable release."""
     release_data = []
 
     start_date_default = datetime(2020, 6, 9)
@@ -816,8 +816,6 @@ if __name__ == "__main__":
         create_initial_patch = 'patch' in create_initial_list
         create_initial_nightly = 'nightly' in create_initial_list
 
-    releases = get_github_releases()
-
     # Variables to store inputs, dev/stable/patch releases and nightly releases
     stable_releases = []
     patch_releases = []
@@ -845,7 +843,8 @@ if __name__ == "__main__":
     else:
         # Create initial stable and patch releases if requested
         if create_initial_stable or create_initial_patch:
-            stable_releases, patch_releases, latest_minor_versions = create_releases(releases)
+            github_releases = get_github_releases()
+            stable_releases, patch_releases, latest_minor_versions = create_initial_releases(github_releases)
 
         # Add stdin input or file input data if provided (existing releases will be overwritten)
         if args.input_stdin or args.input:
@@ -861,7 +860,7 @@ if __name__ == "__main__":
         # we define stable releases in input file, therefore this has to be run past defining inputs
         # Create intial nightly releases if requested (needs stable releases)
         if create_initial_nightly:
-            nightly_releases = create_nightly_releases(stable_releases)
+            nightly_releases = create_initial_nightly_releases(stable_releases)
 
     # elif args.type != '':
 
