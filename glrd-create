@@ -442,7 +442,7 @@ def create_single_release(release_type, args, existing_releases):
 
     if args.date_time_extended:
         try:
-            extended_date = datetime.strptime(args.date_time_released, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            extended_date = datetime.strptime(args.date_time_extended, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
             lifecycle_extended_isodate = extended_date.strftime('%Y-%m-%d')
             lifecycle_extended_timestamp = int(extended_date.timestamp())
         except ValueError:
@@ -453,7 +453,7 @@ def create_single_release(release_type, args, existing_releases):
 
     if args.date_time_eol:
         try:
-            eol_date = datetime.strptime(args.date_time_released, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            eol_date = datetime.strptime(args.date_time_eol, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
             lifecycle_eol_isodate = eol_date.strftime('%Y-%m-%d')
             lifecycle_eol_timestamp = int(eol_date.timestamp())
         except ValueError:
@@ -488,13 +488,7 @@ def create_single_release(release_type, args, existing_releases):
         except ValueError:
             sys.exit("Error: Invalid --version format. Use format: major.minor")
     else:
-        version = get_garden_version_for_date(args, release_date, existing_releases)
-        if args.type == 'stable':
-            # For stable releases, set minor to None
-            major = int(version)
-            minor = None
-        else:
-            major, minor = map(int, version.split('.'))        
+        major, minor = get_garden_version_for_date(release_type, release_date, existing_releases)
 
     # Create release data
     release = {}
@@ -891,11 +885,11 @@ if __name__ == "__main__":
 
         # Create a development release if requested
         if args.type == 'dev':
-            dev_releases = merge_input_data(dev_releases, [create_single_release('dev', args, dev_releases)])
+            dev_releases = merge_input_data([create_single_release('dev', args, dev_releases)], dev_releases)
 
         # Create a nightly release if requested
         if args.type == 'nightly':
-            nightly_releases = merge_input_data(nightly_releases, [create_single_release('nightly', args, nightly_releases)])
+            nightly_releases = merge_input_data([create_single_release('nightly', args, nightly_releases)], nightly_releases)
 
         # Create a stable release if requested
         if args.type == 'stable':
@@ -903,7 +897,7 @@ if __name__ == "__main__":
 
         # Create a patch release if requested
         if args.type == 'patch':
-            patch_releases = merge_input_data(patch_releases, [create_single_release('patch', args, patch_releases)])
+            patch_releases = merge_input_data([create_single_release('patch', args, patch_releases)], patch_releases)
 
     # Set EOL for patch releases based on latest minor versions
     set_latest_minor_eol_to_major(stable_releases, patch_releases)
