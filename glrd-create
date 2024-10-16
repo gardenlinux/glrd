@@ -511,6 +511,34 @@ def create_single_release(release_type, args):
 
     return release
 
+def delete_release(args, stable_releases, patch_releases, nightly_releases, dev_releases):
+    """Delete a release by name from the appropriate release list."""
+    release_type, major, minor = parse_release_name(args.delete)
+
+    # Select the appropriate list based on release_type
+    if release_type == 'stable':
+        release_list = stable_releases
+    elif release_type == 'patch':
+        release_list = patch_releases
+    elif release_type == 'nightly':
+        release_list = nightly_releases
+    elif release_type == 'dev':
+        release_list = dev_releases
+    else:
+        sys.exit(f"Error: Unknown release type '{release_type}' in release name.")
+
+    # Find and remove the release
+    release_found = False
+    for release in release_list:
+        if release['name'] == args.delete:
+            release_found = True
+            release_list.remove(release)
+
+    if not release_found:
+        sys.exit(f"Error: Release '{args.delete}' not found in the existing data.")
+
+    print(f"Release '{args.delete}' will be deleted.")
+
 def merge_input_data(auto_data, manual_data):
     """Merge two lists of release data, avoiding duplicates."""
     # Assuming auto_data and manual_data are both lists
@@ -596,6 +624,29 @@ def load_input_stdin():
     except Exception as e:
         sys.exit(f"Error reading input from stdin: {str(e)}")
 
+def parse_release_name(release_name):
+    """Parse the release name in the format 'type-major.minor' or 'type-major'."""
+    valid_types = ['stable', 'patch', 'nightly', 'dev']
+    type_and_version = release_name.split('-', 1)
+    if len(type_and_version) != 2:
+        sys.exit("Error: Invalid release name format. Expected 'type-major.minor' or 'type-major'")
+    release_type = type_and_version[0]
+    if release_type not in valid_types:
+        sys.exit(f"Error: Invalid release type '{release_type}'. Must be one of {', '.join(valid_types)}.")
+    version = type_and_version[1]
+    version_parts = version.split('.')
+    try:
+        if len(version_parts) == 2:
+            major = int(version_parts[0])
+            minor = int(version_parts[1])
+        elif len(version_parts) == 1:
+            major = int(version_parts[0])
+            minor = None
+        else:
+            sys.exit("Error: Invalid version format in release name.")
+    except ValueError:
+        sys.exit("Error: Major and minor versions must be integers.")
+    return release_type, major, minor
 
 def validate_release_data(release):
     """Validate release data using the appropriate JSON schema."""
@@ -720,8 +771,8 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Generate a file of the latest Garden Linux releases in YAML or JSON format.")
-    parser.add_argument('--query', action='store_true', help="Query and use existing releases using glrd command.")
-    parser.add_argument('--generate-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,nightly'.")    
+    parser.add_argument('--generate-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
+    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")    
     parser.add_argument('--dev', action='store_true', help="Generate a development release using the current timestamp and git information.")    
     parser.add_argument('--nightly', action='store_true', help="Generate a nightly release using the current timestamp and git information.")    
     parser.add_argument('--stable', action='store_true', help="Generate a stable release using the current timestamp and git information.")    
@@ -731,6 +782,7 @@ def parse_arguments():
     parser.add_argument('--date-time-released', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument('--date-time-extended', type=str, help="Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument('--date-time-eol', type=str, help="Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
+    parser.add_argument('--no-query', action='store_true', help="Do not query and use existing releases using glrd command. Be careful, this can delete your releases.")
     parser.add_argument('--input-stdin', action='store_true', help="Process a single input from stdin (JSON data).")
     parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
     parser.add_argument('--input-file', type=str, default="releases-input.yaml", help="The name of the input file (default: releases-input.yaml).")
@@ -776,48 +828,59 @@ if __name__ == "__main__":
     dev_releases = []
     merged_releases = []
 
-    if args.query:
+    if not args.no_query:
         # Execute glrd command to fill stable, patch, nightly, and dev releases
         stable_releases = glrd_query_type("stable")
         patch_releases = glrd_query_type("patch")
         nightly_releases = glrd_query_type("nightly")
         dev_releases = glrd_query_type("dev")
 
-    # Create initial stable and patch releases if requested
-    if generate_initial_stable or generate_initial_patch:
-        stable_releases, patch_releases, latest_minor_versions = create_releases(releases)
+    if not args.s3_update:
+        print(f"Warning: '--s3-update' was not passed, skipping S3 update.")
 
-    # Add stdin input or file input data if provided (existing releases will be overwritten)
-    if args.input_stdin or args.input:
-        if args.input_stdin:
-            input_stable, input_patch, input_nightly, input_dev = load_input_stdin()
-        elif args.input:
-            input_stable, input_patch, input_nightly, input_dev = load_input(args.input_file)
-        stable_releases = merge_input_data(stable_releases, input_stable)
-        patch_releases = merge_input_data(patch_releases, input_patch)
-        nightly_releases = merge_input_data(nightly_releases, input_nightly)
-        dev_releases = merge_input_data(dev_releases, input_dev)
+    if args.delete:
+        if args.no_query:
+            sys.exit("Error: '--delete' can not run with '--no-query'.")
+        # if not args.s3_update:
+        #     sys.exit("Error: '--delete' requires '--s3-update' to actually update.")
+        delete_release(args, stable_releases, patch_releases, nightly_releases, dev_releases)
 
-    # we define stable releases in input file, therefore this has to be run past defining inputs
-    # Generate nightly releases if requested (needs stable releases)
-    if generate_initial_nightly:
-        nightly_releases = create_nightly_releases(stable_releases)
+    else:
+        # Create initial stable and patch releases if requested
+        if generate_initial_stable or generate_initial_patch:
+            stable_releases, patch_releases, latest_minor_versions = create_releases(releases)
 
-    # Create a development release if requested
-    if args.dev:
-        dev_releases = dev_releases + [create_single_release('dev', args)]
+        # Add stdin input or file input data if provided (existing releases will be overwritten)
+        if args.input_stdin or args.input:
+            if args.input_stdin:
+                input_stable, input_patch, input_nightly, input_dev = load_input_stdin()
+            elif args.input:
+                input_stable, input_patch, input_nightly, input_dev = load_input(args.input_file)
+            stable_releases = merge_input_data(stable_releases, input_stable)
+            patch_releases = merge_input_data(patch_releases, input_patch)
+            nightly_releases = merge_input_data(nightly_releases, input_nightly)
+            dev_releases = merge_input_data(dev_releases, input_dev)
 
-    # Create a nightly release if requested
-    if args.nightly:
-        nightly_releases = nightly_releases + [create_single_release('nightly', args)]
+        # we define stable releases in input file, therefore this has to be run past defining inputs
+        # Generate nightly releases if requested (needs stable releases)
+        if generate_initial_nightly:
+            nightly_releases = create_nightly_releases(stable_releases)
 
-    # Create a stable release if requested
-    if args.stable:
-        stable_releases = stable_releases + [create_single_release('stable', args)]
+        # Create a development release if requested
+        if args.dev:
+            dev_releases = dev_releases + [create_single_release('dev', args)]
 
-    # Create a patch release if requested
-    if args.patch:
-        patch_releases = patch_releases + [create_single_release('patch', args)]
+        # Create a nightly release if requested
+        if args.nightly:
+            nightly_releases = nightly_releases + [create_single_release('nightly', args)]
+
+        # Create a stable release if requested
+        if args.stable:
+            stable_releases = stable_releases + [create_single_release('stable', args)]
+
+        # Create a patch release if requested
+        if args.patch:
+            patch_releases = patch_releases + [create_single_release('patch', args)]
 
     # Set EOL for patch releases based on latest minor versions
     set_latest_minor_eol_to_major(stable_releases, patch_releases)
