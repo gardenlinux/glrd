@@ -344,7 +344,7 @@ def create_initial_releases(releases):
         # print(f"Processing {release_type} release: {tag_name}")
 
         release_info = {
-            "name": f"release-{tag_name}",
+            "name": f"{release_type}-{tag_name}",
             "type": release_type,
             "version": {"major": major},
             "lifecycle": {
