@@ -6,19 +6,16 @@ This repository contains these tools:
 
 - **`glrd-create`**: A tool for generating and populating the GLRD with initial release data and for creating individual release entries.
 - **`glrd`**: A command-line client for querying the GLRD to retrieve release information based on various criteria.
-- **TODO: github action**: A github action for creating and querying GLRD entries.
 
 ## Table of Contents
 
 - [Garden Linux Releases](#garden-linux-releases)
 - [Overview of GLRD](#overview)
-- [Release Schema](#release-schema)
 - [Prerequisites](#prerequisites)
-- [Installation](#installation)
+- [Run GLRD](#run-glrd)
+- [glrd](#glrd)
 - [glrd-create](#glrd-create)
-- [glrd](#glrd-1)
-- [Container images](#container-images)
-- [GitHub Action](#github-action)
+- [Release Schema](#release-schema)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -31,6 +28,276 @@ For a general overview about Garden Linux releases and their lifecycle, have a l
 The GLRD provides a structured way to store and access release data for Garden Linux, including different release types such as stable, patch, nightly, and development releases. It uses JSON and YAML formats to store release information and supports integration with AWS S3 for storage to host release data..
 
 ![Overview](assets/overview.png)
+
+## Run GLRD
+
+### Manually run Python scripts
+
+<details>
+  <summary>Details</summary>
+
+### Prerequisites
+
+- **Python 3.6+**
+
+You can install the required Python packages using:
+
+```bash
+pip install -r requirements.txt
+```
+
+- **AWS CLI** configured with appropriate permissions if you plan to use S3 integration.
+- **Git** and **GitHub CLI (gh)** installed and configured if you plan to generate release data from GitHub.
+
+### Installation
+
+Clone the repository and ensure that the scripts are executable:
+
+```bash
+git clone https://github.com/yourusername/gardenlinux-release-database.git
+cd gardenlinux-release-database
+chmod +x glrd-create glrd
+```
+</details>
+
+### Run in container
+
+<details>
+  <summary>Details</summary>
+
+You can also use the GLRD tools by building or running a container image.
+
+#### Run pre-build image
+
+```
+podman run -it --rm ghcr.io/gardenlinux/glrd glrd
+podman run -it --rm ghcr.io/gardenlinux/glrd glrd-create
+
+```
+
+#### Build and run image locally
+
+```
+podman build -t glrd .
+podman run -it --rm glrd glrd
+podman run -it --rm glrd glrd-create
+```
+
+</details>
+
+### Run in GitHub action
+
+<details>
+  <summary>Details</summary>
+
+```
+  - name: Get latest GL patch version
+    id: gl_version_latest
+    uses: gardenlinux/glrd@main
+    with:
+      cmd: glrd --no-header --type patch --latest --fields Version
+  - name: Use latest GL patch version
+    run: echo ${{ steps.gl_version_latest.outputs.result }}
+
+  - name: Get latest GL nightly version
+    id: gl_version_nightly
+    uses: gardenlinux/glrd@main
+    with:
+      cmd: glrd --no-header --type nightly --latest --fields Version
+  - name: Use latest GL nightly version
+    run: echo ${{ steps.gl_version_nightly.outputs.result }}
+```
+
+</details>
+
+## glrd
+
+The `glrd` script is a command-line utility for querying the GLRD. It allows you to filter and display release information based on various criteria.
+
+### Usage
+
+```
+❯ ./glrd --help
+usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}] [--input-url INPUT_URL] [--no-input-split] [--output-type {json,yaml,markdown,shell}] [--active] [--latest] [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header]
+
+Process and filter releases data from a file or URL.
+
+options:
+  -h, --help            show this help message and exit
+  --input-format {yaml,json}
+                        Input format: 'yaml' or 'json' (default: json).
+  --input-file-prefix INPUT_FILE_PREFIX
+                        The prefix to get input files (default: releases).
+  --input-type {file,url}
+                        Specify if the input type (default: url).
+  --input-url INPUT_URL
+                        Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.
+  --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.
+  --output-type {json,yaml,markdown,shell}
+                        Output format: json, yaml, markdown, shell (default).
+  --active              Show only active releases.
+  --latest              Show the latest active major.minor release.
+  --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev
+  --version VERSION     Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0
+  --fields FIELDS       Comma-separated list of fields to output. E.g., --fields "Name, Version, Type, Git Commit, Release date, Extended maintenance, End of maintenance"
+  --no-header           Omit the header in shell output.
+```
+
+### Get latest Garden Linux Version
+
+```
+❯ ./glrd --latest
+Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance  
+patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12 
+
+# get only version field
+❯ ./glrd --latest --fields Version --no-header
+1592.1
+```
+
+### Get all active and supported Garden Linux Versions
+
+```
+❯ ./glrd --active
+Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance  
+stable-1443         	1443                	stable              	N/A                 	2024-03-13          	2024-09-13          	2025-01-13          
+patch-1443.15       	1443.15             	patch               	5d33a69             	2024-10-10          	N/A                 	2025-01-13          
+stable-1592         	1592                	stable              	N/A                 	2024-08-12          	2025-05-12          	2025-08-12          
+patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12
+```
+
+## glrd-create
+
+The `glrd-create` script is used to generate release data for Garden Linux. It can create initial releases by fetching data from GitHub, generate individual release entries, and manage release data files.
+
+### Usage
+
+```
+❯ ./glrd-create --help
+usage: glrd-create [-h] [--create-initial-releases CREATE_INITIAL_RELEASES] [--delete DELETE] [--type TYPE]
+                   [--version VERSION] [--commit COMMIT] [--date-time-released DATE_TIME_RELEASED]
+                   [--date-time-extended DATE_TIME_EXTENDED] [--date-time-eol DATE_TIME_EOL] [--no-query]
+                   [--input-stdin] [--input] [--input-file INPUT_FILE] [--output-file-prefix OUTPUT_FILE_PREFIX]
+                   [--output-format {yaml,json}] [--no-output-split] [--s3-bucket-name S3_BUCKET_NAME]
+                   [--s3-bucket-prefix S3_BUCKET_PREFIX] [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
+                   [--s3-update]
+
+Create or delete Garden Linux releases in th GLRD.
+
+options:
+  -h, --help            show this help message and exit
+  --create-initial-releases CREATE_INITIAL_RELEASES
+                        Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.
+  --delete DELETE       Delete a release by name (format: type-major.minor). Requires --s3-update.
+  --type TYPE           Create a release for this type using the current timestamp and git information (choose one
+                        of: stable,patch,nightly,dev)'.
+  --version VERSION     Manually specify the version (format: major.minor).
+  --commit COMMIT       Manually specify the git commit hash (40 characters).
+  --date-time-released DATE_TIME_RELEASED
+                        Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
+  --date-time-extended DATE_TIME_EXTENDED
+                        Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
+  --date-time-eol DATE_TIME_EOL
+                        Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
+  --no-query            Do not query and use existing releases using glrd command. Be careful, this can delete your
+                        releases.
+  --input-stdin         Process a single input from stdin (JSON data).
+  --input               Process input from --input-file.
+  --input-file INPUT_FILE
+                        The name of the input file (default: releases-input.yaml).
+  --output-file-prefix OUTPUT_FILE_PREFIX
+                        The prefix added to the output file (default: releases).
+  --output-format {yaml,json}
+                        Output format: 'yaml' or 'json' (default: json).
+  --no-output-split     Do not split Output into stable+patch and nightly. Additional output-files *-nightly and
+                        *-dev will not be created.
+  --s3-bucket-name S3_BUCKET_NAME
+                        Name of S3 bucket. Defaults to 'gardenlinux-releases'.
+  --s3-bucket-prefix S3_BUCKET_PREFIX
+                        Prefix inside S3 bucket. Defaults to ''.
+  --s3-bucket-region S3_BUCKET_REGION
+                        Name of S3 bucket Region. Defaults to 'eu-central-1'.
+  --s3-create-bucket    Create an S3 bucket.
+  --s3-update           Update (merge) the generated files with S3.
+```
+
+### Generate and populate initial release data
+
+This will generate the following initial release data ...
+
+- stable releases
+- patch releases
+- nightly releases
+- releases from `releases-input.yaml` (contain manual lifecycle fields)
+
+... and upload it to the default S3 bucket (if `--s3-update` is passed).
+
+```
+./glrd-create --create-initial-releases stable,patch,nightly --input
+```
+
+### Generate/Update an arbitrary release from JSON data
+
+This will generate/update a release from JSON data and upload it to the default S3 bucket.
+
+```
+echo '{
+  "releases": [
+    {
+      "name": "patch-1592.1",
+      "type": "patch",
+      "version": {
+        "major": 1592,
+        "minor": 1
+      },
+      "lifecycle": {
+        "released": {
+          "isodate": "2024-08-22",
+          "timestamp": 1724277600
+        },
+        "eol": {
+          "isodate": "2025-08-12",
+          "timestamp": 1754949600
+        }
+      },
+      "git": {
+        "commit": "ec945aa995d0f08d64303ff6045b313b40b665fb",
+        "commit_short": "ec945aa"
+      },
+      "github": {
+        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      }
+    }
+  ]
+}' | ./glrd-create --input-stdin
+```
+
+### Create or update a stable release
+
+```
+./glrd-create --type stable --version 1312 --date-time-released 2023-11-16T00:00:00 --date-time-extended 2024-05-03T00:00:00 --date-time-eol 2024-08-03T00:00:00
+```
+
+### Create or update a patch release
+
+```
+# create new patch
+./glrd-create --type patch --version 1312.7 --date-time-released 2024-07-03T00:00:00 --date-time-eol 2024-08-03T00:00:00
+
+# query old patch
+./glrd --version 1312.5 --output-type yaml
+
+# update old patch's date-time-eol to match new patch
+./glrd-create --type patch --version 1312.5 --date-time-released 2024-06-14T00:00:00 --date-time-eol 2024-07-03T00:00:00
+```
+
+### Create a new nightly release
+
+Without any additional parameters, the current timestamp and git information will be used to create releases. For patch, nightly and dev releases, the next free minor version is automatically chosen.
+
+```
+./glrd-create --type nightly
+```
 
 ## Release Schema
 
@@ -149,212 +416,6 @@ For example:
 In this example, the `eol` of `patch-1312.1` is set to the `released` date of `patch-1312.2`, and the `eol` of the latest patch release (`patch-1312.7`) is set to the `eol` of the stable release (`patch-1312`).
 
 Please note that the `extended` lifecycle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
-
-
-## Prerequisites
-
-- **Python 3.6+**
-
-You can install the required Python packages using:
-
-```bash
-pip install -r requirements.txt
-```
-
-- **AWS CLI** configured with appropriate permissions if you plan to use S3 integration.
-- **Git** and **GitHub CLI (gh)** installed and configured if you plan to generate release data from GitHub.
-
-## Installation
-
-Clone the repository and ensure that the scripts are executable:
-
-```bash
-git clone https://github.com/yourusername/gardenlinux-release-database.git
-cd gardenlinux-release-database
-chmod +x glrd-create glrd
-```
-
-## glrd-create
-
-The `glrd-create` script is used to generate release data for Garden Linux. It can create initial releases by fetching data from GitHub, generate individual release entries, and manage release data files.
-
-### Usage
-
-```bash
-./glrd-create --help
-```
-
-```
-❯ ./glrd-create --help
-usage: glrd-create [-h] [--create-initial-releases CREATE_INITIAL_RELEASES] [--delete DELETE] [--type TYPE]
-                   [--version VERSION] [--commit COMMIT] [--date-time-released DATE_TIME_RELEASED]
-                   [--date-time-extended DATE_TIME_EXTENDED] [--date-time-eol DATE_TIME_EOL] [--no-query]
-                   [--input-stdin] [--input] [--input-file INPUT_FILE] [--output-file-prefix OUTPUT_FILE_PREFIX]
-                   [--output-format {yaml,json}] [--no-output-split] [--s3-bucket-name S3_BUCKET_NAME]
-                   [--s3-bucket-prefix S3_BUCKET_PREFIX] [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
-                   [--s3-update]
-
-Create or delete Garden Linux releases in th GLRD.
-
-options:
-  -h, --help            show this help message and exit
-  --create-initial-releases CREATE_INITIAL_RELEASES
-                        Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.
-  --delete DELETE       Delete a release by name (format: type-major.minor). Requires --s3-update.
-  --type TYPE           Create a release for this type using the current timestamp and git information (choose one
-                        of: stable,patch,nightly,dev)'.
-  --version VERSION     Manually specify the version (format: major.minor).
-  --commit COMMIT       Manually specify the git commit hash (40 characters).
-  --date-time-released DATE_TIME_RELEASED
-                        Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
-  --date-time-extended DATE_TIME_EXTENDED
-                        Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
-  --date-time-eol DATE_TIME_EOL
-                        Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
-  --no-query            Do not query and use existing releases using glrd command. Be careful, this can delete your
-                        releases.
-  --input-stdin         Process a single input from stdin (JSON data).
-  --input               Process input from --input-file.
-  --input-file INPUT_FILE
-                        The name of the input file (default: releases-input.yaml).
-  --output-file-prefix OUTPUT_FILE_PREFIX
-                        The prefix added to the output file (default: releases).
-  --output-format {yaml,json}
-                        Output format: 'yaml' or 'json' (default: json).
-  --no-output-split     Do not split Output into stable+patch and nightly. Additional output-files *-nightly and
-                        *-dev will not be created.
-  --s3-bucket-name S3_BUCKET_NAME
-                        Name of S3 bucket. Defaults to 'gardenlinux-releases'.
-  --s3-bucket-prefix S3_BUCKET_PREFIX
-                        Prefix inside S3 bucket. Defaults to ''.
-  --s3-bucket-region S3_BUCKET_REGION
-                        Name of S3 bucket Region. Defaults to 'eu-central-1'.
-  --s3-create-bucket    Create an S3 bucket.
-  --s3-update           Update (merge) the generated files with S3.
-```
-
-### Generate and populate initial release data
-
-This will generate the following initial release data ...
-
-- stable releases
-- nightly releases
-- releases from `releases-input.yaml` (contain manual lifecycle fields)
-
-... and upload it to the default S3 bucket.
-
-```
-./glrd-create --generate-initial-releases stable,nightly --input --s3-update
-```
-
-### Generate/Update an arbitrary release from JSON data
-
-This will generate/update a release from JSON data and upload it to the default S3 bucket.
-
-```
-echo '{
-  "releases": [
-    {
-      "name": "patch-1592.1",
-      "type": "patch",
-      "version": {
-        "major": 1592,
-        "minor": 1
-      },
-      "lifecycle": {
-        "released": {
-          "isodate": "2024-08-22",
-          "timestamp": 1724277600
-        },
-        "eol": {
-          "isodate": "2025-08-12",
-          "timestamp": 1754949600
-        }
-      },
-      "git": {
-        "commit": "ec945aa995d0f08d64303ff6045b313b40b665fb",
-        "commit_short": "ec945aa"
-      },
-      "github": {
-        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
-      }
-    }
-  ]
-}' | ./glrd-create --input-stdin --s3-update
-```
-
-## glrd
-
-The `glrd` script is a command-line utility for querying the GLRD. It allows you to filter and display release information based on various criteria.
-
-### Usage
-
-```
-❯ ./glrd --help
-usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}] [--input-url INPUT_URL] [--no-input-split] [--output-type {json,yaml,markdown,shell}] [--active] [--latest] [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header]
-
-Process and filter releases data from a file or URL.
-
-options:
-  -h, --help            show this help message and exit
-  --input-format {yaml,json}
-                        Input format: 'yaml' or 'json' (default: json).
-  --input-file-prefix INPUT_FILE_PREFIX
-                        The prefix to get input files (default: releases).
-  --input-type {file,url}
-                        Specify if the input type (default: url).
-  --input-url INPUT_URL
-                        Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.
-  --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.
-  --output-type {json,yaml,markdown,shell}
-                        Output format: json, yaml, markdown, shell (default).
-  --active              Show only active releases.
-  --latest              Show the latest active major.minor release.
-  --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev
-  --version VERSION     Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0
-  --fields FIELDS       Comma-separated list of fields to output. E.g., --fields "Name, Version, Type, Git Commit, Release date, Extended maintenance, End of maintenance"
-  --no-header           Omit the header in shell output.
-```
-
-## Container images
-
-You can also use the GLRD tools by building or running a container image.
-
-### build and run image locally
-
-```
-podman build -t glrd .
-podman run -it --rm localhost/glrd glrd
-podman run -it --rm localhost/glrd glrd-create
-```
-
-### run pre-build image
-
-```
-podman run -it --rm ghcr.io/gardenlinux/glrd glrd
-podman run -it --rm ghcr.io/gardenlinux/glrd glrd-create
-
-```
-
-## GitHub action
-
-```
-  - name: Get latest GL patch version
-    id: gl_version_latest
-    uses: gardenlinux/glrd@main
-    with:
-      cmd: glrd --no-header --type patch --latest --fields Version
-  - name: Use latest GL patch version
-    run: echo ${{ steps.gl_version_latest.outputs.result }}
-
-  - name: Get latest GL nightly version
-    id: gl_version_nightly
-    uses: gardenlinux/glrd@main
-    with:
-      cmd: glrd --no-header --type nightly --latest --fields Version
-  - name: Use latest GL nightly version
-    run: echo ${{ steps.gl_version_nightly.outputs.result }}
-```
 
 ## Contributing
 
