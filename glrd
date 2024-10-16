@@ -26,8 +26,8 @@ def load_releases(input_source, is_url=False):
             return json.load(file)
 
 def get_version_string(version, release_type=None):
-    """Return a version string from a version object. Show major only for stable releases."""
-    if release_type == 'stable':
+    """Return a version string from a version object. Show major only for stable and next releases."""
+    if release_type in ['stable', 'next']:
         return str(version['major'])  # Stable releases show only major version
     return f"{version['major']}.{version.get('minor', 0)}"
 
@@ -175,8 +175,26 @@ def filter_fields(headers, rows, fields):
     return filtered_headers, filtered_rows
 
 def sort_releases(releases):
-    """Sort releases by major and minor version, treating None or 0 minor version specially for stable."""
-    return sorted(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', -1)))
+    """Sort releases by major and minor version, handling non-integer majors like 'next'."""
+    def parse_version_part(part):
+        if isinstance(part, int):
+            return part
+        elif isinstance(part, str):
+            if part.lower() == 'next':
+                # Assign a special value to place 'next' releases appropriately
+                return float('inf')  # Place at the end
+            else:
+                # Handle other string versions if necessary
+                return -1
+        else:
+            return -1  # Default value for unexpected types
+
+    def sort_key(r):
+        major = parse_version_part(r['version'].get('major'))
+        minor = parse_version_part(r['version'].get('minor', -1))
+        return (major, minor)
+    
+    return sorted(releases, key=sort_key)
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -191,7 +209,7 @@ def parse_arguments():
     parser.add_argument('--output-description', type=str, default='Garden Linux Releases', help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
     parser.add_argument('--active', action='store_true', help="Show only active releases.")
     parser.add_argument('--latest', action='store_true', help="Show the latest active major.minor release.")
-    parser.add_argument('--type', type=str, default='stable,patch', help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev")
+    parser.add_argument('--type', type=str, default='stable,patch', help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
     parser.add_argument('--version', type=str, help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
     parser.add_argument(
         '--fields', 
@@ -213,12 +231,18 @@ def main():
     if args.no_input_split:
         releases = load_releases(args.input, is_url=(args.input_type == 'url')).get('releases', [])
     else:
+        releases_next = []
         releases_stable = []
         releases_patch = []
         releases_nightly = []
         releases_dev = []
         types = args.type.split(',')
         is_url = (args.input_type == 'url')
+        if 'next' in types:
+            input_file = args.input_file_prefix + '-next' + '.' + args.input_format
+            if is_url:
+                input_file = args.input_url + '/' + input_file
+            releases_next = load_releases(input_file, is_url=is_url).get('releases', [])
         if 'stable' in types:
             input_file = args.input_file_prefix + '-stable' + '.' + args.input_format
             if is_url:
@@ -239,7 +263,7 @@ def main():
             if is_url:
                 input_file = args.input_url + '/' + input_file
             releases_dev = load_releases(input_file, is_url=is_url).get('releases', [])
-        releases = releases_stable + releases_patch + releases_nightly + releases_dev
+        releases = releases_next + releases_stable + releases_patch + releases_nightly + releases_dev
 
     # Filter by version and type
     releases = filter_releases(releases, release_types=args.type, version=args.version)

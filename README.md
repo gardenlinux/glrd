@@ -177,7 +177,7 @@ patch-1592.1        	1592.1              	patch               	ec945aa          
 ### Create [Mermaid Gantt Chart](https://mermaid.js.org/syntax/gantt.html) for active releases
 
 ```
-❯ ./glrd --active --type stable --output-type mermaid_gantt --output-description "Garden Linux active Releases"
+❯ ./glrd --active --type next,stable --output-type mermaid_gantt --output-description "Garden Linux active Releases"
 gantt
     title Garden Linux active Releases
     axisFormat %m.%y
@@ -193,6 +193,12 @@ gantt
         Extended maintenance:       milestone, 2025-05-12, 0m
         Extended maintenance:       task, 2025-05-12, 3M
         End of maintenance:         milestone, 2025-08-12, 0m
+    section next
+        Release:                milestone, 2024-12-01, 0m
+        Standard maintenance:       task, 2024-12-01, 6M
+        Extended maintenance:       milestone, 2025-06-01, 0m
+        Extended maintenance:       task, 2025-06-01, 3M
+        End of maintenance:         milestone, 2025-09-01, 0m        
 ```
 
 ## glrd-create
@@ -410,6 +416,27 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+
+### Next Release
+
+[Next release](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#next-release) is the projected next major releases. There can only be a single `next` release.
+
+#### Schema Fields
+
+- **`name`**: A string representing the release name (`next`).
+- **`type`**: `next`.
+- **`version`**:
+  - **`major`**: `next`.
+- **`lifecycle`**:
+  - **`released`**:
+    - **`isodate`**: The release date in ISO format (`YYYY-MM-DD`).
+    - **`timestamp`**: The UNIX timestamp of the release date.
+  - **`extended`**:
+    - **`isodate`**: Optional extended maintenance date in ISO format.
+    - **`timestamp`**: Optional UNIX timestamp for the extended maintenance date.
+  - **`eol`**:
+    - **`isodate`**: End-of-life date in ISO format.
+    - **`timestamp`**: UNIX timestamp for the end-of-life date.
 
 ### Lifecycle Dependencies
 

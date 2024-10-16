@@ -19,6 +19,43 @@ import shutil
 
 # JSON schema for stable, patch, and nightly releases
 schemas = {
+    "next": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "type": {"enum": ["next"]},
+            "version": {
+                "type": "object",
+                "properties": { "major": {"enum": ["next"]}},
+                "required": ["major"]
+            },
+            "lifecycle": {
+                "type": "object",
+                "properties": {
+                    "released": {"type": "object", "properties": {
+                        "isodate": {"type": "string", "format": "date"},
+                        "timestamp": {"type": "integer"}},
+                        "required": ["isodate", "timestamp"]},
+                    "extended": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": ["string"], "format": "date"},
+                            "timestamp": {"type": ["integer"]}
+                        }
+                    },
+                    "eol": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": ["string"], "format": "date"},
+                            "timestamp": {"type": ["integer"]}
+                        }
+                    }
+                },
+                "required": ["released", "extended", "eol"]
+            }
+        },
+        "required": ["name", "type", "version", "lifecycle"]
+    },
     "stable": {
         "type": "object",
         "properties": {
@@ -51,7 +88,7 @@ schemas = {
                         }
                     }
                 },
-                "required": ["released", "eol"]
+                "required": ["released", "extended", "eol"]
             }
         },
         "required": ["name", "type", "version", "lifecycle"]
@@ -307,7 +344,9 @@ def get_garden_version_for_date(release_type, date, existing_releases):
     base_date = datetime(2020, 3, 31, tzinfo=pytz.UTC)
     major = (date - base_date).days
 
-    if release_type == 'stable':
+    if release_type == 'next':
+        minor = 0
+    elif release_type == 'stable':
         minor = 0
     else:
         # Collect existing minor versions for the given major version and release type
@@ -326,7 +365,7 @@ def get_garden_version_for_date(release_type, date, existing_releases):
             minor = 0
 
     # DEBUG
-    # print(f"New {release_type} version for {date} is {major}.{minor}")
+    print(f"New {release_type} version for {date} is {major}.{minor}")
 
     return major, minor
 
@@ -472,7 +511,10 @@ def create_single_release(release_type, args, existing_releases):
         commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
 
     # Check if a manual version is provided, otherwise use garden version for the date
-    if args.version and args.type == 'stable':
+    if args.type == 'next':
+        major = 'next'
+        minor = None
+    elif args.version and args.type == 'stable':
         # For 'stable' releases, version should not contain '.'
         if '.' in args.version:
             sys.exit("Error: Invalid --version format for stable release. Use format: major (integer without '.')")
@@ -506,6 +548,14 @@ def create_single_release(release_type, args, existing_releases):
         release['git'] = {}
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
+    elif release_type == "next":
+        release['name'] = f"{release_type}"
+        release['lifecycle']['extended'] = {}
+        release['lifecycle']['extended']['isodate'] = lifecycle_extended_isodate
+        release['lifecycle']['extended']['timestamp'] = lifecycle_extended_timestamp
+        release['lifecycle']['eol'] = {}
+        release['lifecycle']['eol']['isodate'] = lifecycle_eol_isodate
+        release['lifecycle']['eol']['timestamp'] = lifecycle_eol_timestamp
     elif release_type == "stable":
         release['name'] = f"{release_type}-{major}"
         release['lifecycle']['extended'] = {}
@@ -528,12 +578,14 @@ def create_single_release(release_type, args, existing_releases):
 
     return release
 
-def delete_release(args, stable_releases, patch_releases, nightly_releases, dev_releases):
+def delete_release(args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases):
     """Delete a release by name from the appropriate release list."""
     release_type, major, minor = parse_release_name(args.delete)
 
     # Select the appropriate list based on release_type
-    if release_type == 'stable':
+    if release_type == 'next':
+        release_list = next_releases
+    elif release_type == 'stable':
         release_list = stable_releases
     elif release_type == 'patch':
         release_list = patch_releases
@@ -611,6 +663,7 @@ def load_input(filename):
         merged_releases = input_data.get('releases', [])
         if len(merged_releases) == 0:
             sys.exit(f"Error, no releases found in JSON from file")
+        next_releases = [r for r in merged_releases if r['type'] == 'next']
         stable_releases = [r for r in merged_releases if r['type'] == 'stable']
         patch_releases = [r for r in merged_releases if r['type'] == 'patch']
         nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
@@ -631,11 +684,12 @@ def load_input_stdin():
         merged_releases = input_data.get('releases', [])
         if len(merged_releases) == 0:
             sys.exit(f"Error, no releases found in JSON from stdin")
+        next_releases = [r for r in merged_releases if r['type'] == 'next']
         stable_releases = [r for r in merged_releases if r['type'] == 'stable']
         patch_releases = [r for r in merged_releases if r['type'] == 'patch']
         nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
         dev_releases = [r for r in merged_releases if r['type'] == 'dev']
-        return stable_releases, patch_releases, nightly_releases, dev_releases
+        return next_releases, stable_releases, patch_releases, nightly_releases, dev_releases
     except json.JSONDecodeError as e:
         sys.exit(f"Error parsing JSON from stdin: {str(e)}")
     except Exception as e:
@@ -643,7 +697,7 @@ def load_input_stdin():
 
 def parse_release_name(release_name):
     """Parse the release name in the format 'type-major.minor' or 'type-major'."""
-    valid_types = ['stable', 'patch', 'nightly', 'dev']
+    valid_types = ['next', 'stable', 'patch', 'nightly', 'dev']
     type_and_version = release_name.split('-', 1)
     if len(type_and_version) != 2:
         sys.exit("Error: Invalid release name format. Expected 'type-major.minor' or 'type-major'")
@@ -792,7 +846,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in th GLRD.")
     parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
     parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")    
-    parser.add_argument('--type', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev)'.")
+    parser.add_argument('--type', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
     parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
     parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
     parser.add_argument('--date-time-released', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
@@ -836,6 +890,7 @@ if __name__ == "__main__":
         create_initial_nightly = 'nightly' in create_initial_list
 
     # Variables to store inputs, dev/stable/patch releases and nightly releases
+    next_releases = []
     stable_releases = []
     patch_releases = []
     nightly_releases = []
@@ -844,6 +899,7 @@ if __name__ == "__main__":
 
     if not args.no_query:
         # Execute glrd command to fill stable, patch, nightly, and dev releases
+        next_releases = glrd_query_type("next")
         stable_releases = glrd_query_type("stable")
         patch_releases = glrd_query_type("patch")
         nightly_releases = glrd_query_type("nightly")
@@ -868,9 +924,10 @@ if __name__ == "__main__":
         # Add stdin input or file input data if provided (existing releases will be overwritten)
         if args.input_stdin or args.input:
             if args.input_stdin:
-                input_stable, input_patch, input_nightly, input_dev = load_input_stdin()
+                input_next, input_stable, input_patch, input_nightly, input_dev = load_input_stdin()
             elif args.input:
-                input_stable, input_patch, input_nightly, input_dev = load_input(args.input_file)
+                input_next, input_stable, input_patch, input_nightly, input_dev = load_input(args.input_file)
+            next_releases = merge_input_data(next_releases, input_next)
             stable_releases = merge_input_data(stable_releases, input_stable)
             patch_releases = merge_input_data(patch_releases, input_patch)
             nightly_releases = merge_input_data(nightly_releases, input_nightly)
@@ -883,13 +940,9 @@ if __name__ == "__main__":
 
     # elif args.type != '':
 
-        # Create a development release if requested
-        if args.type == 'dev':
-            dev_releases = merge_input_data([create_single_release('dev', args, dev_releases)], dev_releases)
-
-        # Create a nightly release if requested
-        if args.type == 'nightly':
-            nightly_releases = merge_input_data([create_single_release('nightly', args, nightly_releases)], nightly_releases)
+        # Create a next release if requested
+        if args.type == 'next':
+            next_releases = merge_input_data([create_single_release('next', args, next_releases)], next_releases)
 
         # Create a stable release if requested
         if args.type == 'stable':
@@ -899,11 +952,20 @@ if __name__ == "__main__":
         if args.type == 'patch':
             patch_releases = merge_input_data([create_single_release('patch', args, patch_releases)], patch_releases)
 
+        # Create a nightly release if requested
+        if args.type == 'nightly':
+            nightly_releases = merge_input_data([create_single_release('nightly', args, nightly_releases)], nightly_releases)
+
+        # Create a development release if requested
+        if args.type == 'dev':
+            dev_releases = merge_input_data([create_single_release('dev', args, dev_releases)], dev_releases)
+
+
     # Set EOL for patch releases based on latest minor versions
     set_latest_minor_eol_to_major(stable_releases, patch_releases)
 
     # Merge all releases into a single list
-    merged_releases = stable_releases + patch_releases + nightly_releases + dev_releases
+    merged_releases = next_releases + stable_releases + patch_releases + nightly_releases + dev_releases
 
     # Ensure timestamps for all releases
     for release in merged_releases:
@@ -913,6 +975,7 @@ if __name__ == "__main__":
     validate_all_releases(merged_releases)
 
     # split all releases again
+    next_releases = [r for r in merged_releases if r['type'] == 'next']
     stable_releases = [r for r in merged_releases if r['type'] == 'stable']
     patch_releases = [r for r in merged_releases if r['type'] == 'patch']
     nightly_releases = [r for r in merged_releases if r['type'] == 'nightly']
@@ -928,6 +991,14 @@ if __name__ == "__main__":
             merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
             upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")            
     else:
+        print(next_releases)
+        if len(next_releases) > 0:
+            output_file = args.output_file_prefix + '-next' + '.' + args.output_format
+            # Handle S3 upload if the argument is provided
+            save_output_file({'releases': next_releases}, filename=output_file, format=args.output_format)
+            if args.s3_update:
+                merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, next_releases)
+                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
         if len(stable_releases) > 0:
             output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
