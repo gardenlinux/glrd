@@ -118,7 +118,10 @@ The `glrd` script is a command-line utility for querying the GLRD. It allows you
 
 ```
 ❯ ./glrd --help
-usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}] [--input-url INPUT_URL] [--no-input-split] [--output-type {json,yaml,markdown,shell}] [--active] [--latest] [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header]
+usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}]
+            [--input-url INPUT_URL] [--no-input-split] [--output-type {json,yaml,markdown,mermaid_gantt,shell}]
+            [--output-description OUTPUT_DESCRIPTION] [--active] [--latest] [--type TYPE] [--version VERSION]
+            [--fields FIELDS] [--no-header]
 
 Process and filter releases data from a file or URL.
 
@@ -132,14 +135,19 @@ options:
                         Specify if the input type (default: url).
   --input-url INPUT_URL
                         Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.
-  --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.
-  --output-type {json,yaml,markdown,shell}
-                        Output format: json, yaml, markdown, shell (default).
+  --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and
+                        *-dev will be parsed.
+  --output-type {json,yaml,markdown,mermaid_gantt,shell}
+                        Output format: json, yaml, markdown, mermaid_gantt, shell (default).
+  --output-description OUTPUT_DESCRIPTION
+                        Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').
   --active              Show only active releases.
   --latest              Show the latest active major.minor release.
-  --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev
+  --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type
+                        stable,patch,nightly,dev
   --version VERSION     Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0
-  --fields FIELDS       Comma-separated list of fields to output. E.g., --fields "Name, Version, Type, Git Commit, Release date, Extended maintenance, End of maintenance"
+  --fields FIELDS       Comma-separated list of fields to output. E.g., --fields "Name, Version, Type, Git Commit,
+                        Release date, Extended maintenance, End of maintenance"
   --no-header           Omit the header in shell output.
 ```
 
@@ -164,6 +172,27 @@ stable-1443         	1443                	stable              	N/A              
 patch-1443.15       	1443.15             	patch               	5d33a69             	2024-10-10          	N/A                 	2025-01-13          
 stable-1592         	1592                	stable              	N/A                 	2024-08-12          	2025-05-12          	2025-08-12          
 patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12
+```
+
+### Create [Mermaid Gantt Chart](https://mermaid.js.org/syntax/gantt.html) for active releases
+
+```
+❯ ./glrd --active --type stable --output-type mermaid_gantt --output-description "Garden Linux active Releases"
+gantt
+    title Garden Linux active Releases
+    axisFormat %m.%y
+    section 1443
+        Release:                milestone, 2024-03-13, 0m
+        Standard maintenance:       task, 2024-03-13, 6M
+        Extended maintenance:       milestone, 2024-09-13, 0m
+        Extended maintenance:       task, 2024-09-13, 4M
+        End of maintenance:         milestone, 2025-01-13, 0m
+    section 1592
+        Release:                milestone, 2024-08-12, 0m
+        Standard maintenance:       task, 2024-08-12, 9M
+        Extended maintenance:       milestone, 2025-05-12, 0m
+        Extended maintenance:       task, 2025-05-12, 3M
+        End of maintenance:         milestone, 2025-08-12, 0m
 ```
 
 ## glrd-create
