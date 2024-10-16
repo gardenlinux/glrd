@@ -185,45 +185,44 @@ The `glrd-create` script is used to generate release data for Garden Linux. It c
 ```
 
 ```
-usage: glrd-create [-h]
-                   [--generate-initial-releases GENERATE_INITIAL_RELEASES]
-                   [--dev] [--nightly] [--stable] [--patch] [--input-stdin]
-                   [--input] [--input-file INPUT_FILE]
-                   [--output-file-prefix OUTPUT_FILE_PREFIX]
-                   [--output-format {yaml,json}] [--no-output-split]
-                   [--s3-bucket-name S3_BUCKET_NAME]
-                   [--s3-bucket-prefix S3_BUCKET_PREFIX]
-                   [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
+❯ ./glrd-create --help
+usage: glrd-create [-h] [--create-initial-releases CREATE_INITIAL_RELEASES] [--delete DELETE] [--type TYPE]
+                   [--version VERSION] [--commit COMMIT] [--date-time-released DATE_TIME_RELEASED]
+                   [--date-time-extended DATE_TIME_EXTENDED] [--date-time-eol DATE_TIME_EOL] [--no-query]
+                   [--input-stdin] [--input] [--input-file INPUT_FILE] [--output-file-prefix OUTPUT_FILE_PREFIX]
+                   [--output-format {yaml,json}] [--no-output-split] [--s3-bucket-name S3_BUCKET_NAME]
+                   [--s3-bucket-prefix S3_BUCKET_PREFIX] [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
                    [--s3-update]
 
-Generate a file of the latest Garden Linux releases in YAML or JSON format.
+Create or delete Garden Linux releases in th GLRD.
 
 options:
   -h, --help            show this help message and exit
-  --generate-initial-releases GENERATE_INITIAL_RELEASES
-                        Comma-separated list of initial releases to retrieve
-                        and generate: 'stable,nightly'.
-  --dev                 Generate a development release using the current
-                        timestamp and git information.
-  --nightly             Generate a nightly release using the current timestamp
-                        and git information.
-  --stable              Generate a stable release using the current timestamp
-                        and git information.
-  --patch               Generate a patch release using the current timestamp
-                        and git information.
-  --input-stdin         Process input from stdin (JSON data).
+  --create-initial-releases CREATE_INITIAL_RELEASES
+                        Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.
+  --delete DELETE       Delete a release by name (format: type-major.minor). Requires --s3-update.
+  --type TYPE           Create a release for this type using the current timestamp and git information (choose one
+                        of: stable,patch,nightly,dev)'.
+  --version VERSION     Manually specify the version (format: major.minor).
+  --commit COMMIT       Manually specify the git commit hash (40 characters).
+  --date-time-released DATE_TIME_RELEASED
+                        Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
+  --date-time-extended DATE_TIME_EXTENDED
+                        Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
+  --date-time-eol DATE_TIME_EOL
+                        Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
+  --no-query            Do not query and use existing releases using glrd command. Be careful, this can delete your
+                        releases.
+  --input-stdin         Process a single input from stdin (JSON data).
   --input               Process input from --input-file.
   --input-file INPUT_FILE
-                        The name of the input file (default: releases-
-                        input.yaml).
+                        The name of the input file (default: releases-input.yaml).
   --output-file-prefix OUTPUT_FILE_PREFIX
-                        The prefix added to the output file (default:
-                        releases).
+                        The prefix added to the output file (default: releases).
   --output-format {yaml,json}
                         Output format: 'yaml' or 'json' (default: json).
-  --no-output-split     Do not split Output into stable+patch and nightly.
-                        Additional output-files *-nightly and *-dev will not
-                        be created.
+  --no-output-split     Do not split Output into stable+patch and nightly. Additional output-files *-nightly and
+                        *-dev will not be created.
   --s3-bucket-name S3_BUCKET_NAME
                         Name of S3 bucket. Defaults to 'gardenlinux-releases'.
   --s3-bucket-prefix S3_BUCKET_PREFIX
@@ -290,16 +289,9 @@ The `glrd` script is a command-line utility for querying the GLRD. It allows you
 
 ### Usage
 
-```bash
-./glrd --help
 ```
-
-```
-usage: glrd [-h] [--input-format {yaml,json}]
-            [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}]
-            [--input-url INPUT_URL] [--no-input-split]
-            [--output-type {json,yaml,markdown,shell}] [--active] [--latest]
-            [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header]
+❯ ./glrd --help
+usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}] [--input-url INPUT_URL] [--no-input-split] [--output-type {json,yaml,markdown,shell}] [--active] [--latest] [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header]
 
 Process and filter releases data from a file or URL.
 
@@ -312,23 +304,15 @@ options:
   --input-type {file,url}
                         Specify if the input type (default: url).
   --input-url INPUT_URL
-                        Input URL to the releases data. Defaults to
-                        gardenlinux-releases S3 URL.
-  --no-input-split      Do not split Input into stable+patch and nightly. No
-                        additional input-files *-nightly and *-dev will be
-                        parsed.
+                        Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.
+  --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.
   --output-type {json,yaml,markdown,shell}
                         Output format: json, yaml, markdown, shell (default).
   --active              Show only active releases.
   --latest              Show the latest active major.minor release.
-  --type TYPE           Filter by release types (comma-separated list,
-                        default: stable,patch). E.g., --type
-                        stable,patch,nightly,dev
-  --version VERSION     Filter by a specific version (major or major.minor).
-                        E.g., --version 1312 or --version 1312.0
-  --fields FIELDS       Comma-separated list of fields to output. E.g.,
-                        --fields "Name, Version, Type, Git Commit, Release
-                        date, Extended maintenance, End of maintenance"
+  --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev
+  --version VERSION     Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0
+  --fields FIELDS       Comma-separated list of fields to output. E.g., --fields "Name, Version, Type, Git Commit, Release date, Extended maintenance, End of maintenance"
   --no-header           Omit the header in shell output.
 ```
 
