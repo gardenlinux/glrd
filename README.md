@@ -280,15 +280,11 @@ echo '{
 
 ### Create or update a patch release
 
+When creating a new patch release, the previous patch release of the same major release gets automatically updated. See [Lifecycle Dependencies](#lifecycle-dependencies) for details.
+
 ```
 # create new patch
-./glrd-create --type patch --version 1312.7 --date-time-released 2024-07-03T00:00:00 --date-time-eol 2024-08-03T00:00:00
-
-# query old patch
-./glrd --version 1312.5 --output-type yaml
-
-# update old patch's date-time-eol to match new patch
-./glrd-create --type patch --version 1312.5 --date-time-released 2024-06-14T00:00:00 --date-time-eol 2024-07-03T00:00:00
+./glrd-create --type patch --version 1312.7
 ```
 
 ### Create a new nightly release
