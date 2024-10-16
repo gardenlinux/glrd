@@ -297,7 +297,7 @@ def get_git_commit_at_time(date, time="08:00", branch="main", remote_repo="https
 
 def get_garden_version_for_date(date, nightly=False):
     """
-    Generate major and minor version based on the Garden Linux base_date.
+    Create major and minor version based on the Garden Linux base_date.
     Logic is taken from `gardenlinux/bin/garden-version`.
     
     Major: timestamp divided by the number of seconds in a day.
@@ -770,13 +770,10 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
 
 def parse_arguments():
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Generate a file of the latest Garden Linux releases in YAML or JSON format.")
-    parser.add_argument('--generate-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
+    parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in th GLRD.")
+    parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
     parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")    
-    parser.add_argument('--dev', action='store_true', help="Generate a development release using the current timestamp and git information.")    
-    parser.add_argument('--nightly', action='store_true', help="Generate a nightly release using the current timestamp and git information.")    
-    parser.add_argument('--stable', action='store_true', help="Generate a stable release using the current timestamp and git information.")    
-    parser.add_argument('--patch', action='store_true', help="Generate a patch release using the current timestamp and git information.")    
+    parser.add_argument('--type', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev)'.")
     parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
     parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
     parser.add_argument('--date-time-released', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
@@ -810,14 +807,14 @@ if __name__ == "__main__":
         bucket_prefix = args.s3_bucket_prefix
 
     # Parse the --generate-initial-releases argument
-    generate_initial_stable = False
-    generate_initial_patch = False
-    generate_initial_nightly = False
-    if args.generate_initial_releases:
-        generate_initial_list = args.generate_initial_releases.split(',')
-        generate_initial_stable = 'stable' in generate_initial_list
-        generate_initial_patch = 'patch' in generate_initial_list
-        generate_initial_nightly = 'nightly' in generate_initial_list
+    create_initial_stable = False
+    create_initial_patch = False
+    create_initial_nightly = False
+    if args.create_initial_releases:
+        create_initial_list = args.create_initial_releases.split(',')
+        create_initial_stable = 'stable' in create_initial_list
+        create_initial_patch = 'patch' in create_initial_list
+        create_initial_nightly = 'nightly' in create_initial_list
 
     releases = get_github_releases()
 
@@ -847,7 +844,7 @@ if __name__ == "__main__":
 
     else:
         # Create initial stable and patch releases if requested
-        if generate_initial_stable or generate_initial_patch:
+        if create_initial_stable or create_initial_patch:
             stable_releases, patch_releases, latest_minor_versions = create_releases(releases)
 
         # Add stdin input or file input data if provided (existing releases will be overwritten)
@@ -862,24 +859,26 @@ if __name__ == "__main__":
             dev_releases = merge_input_data(dev_releases, input_dev)
 
         # we define stable releases in input file, therefore this has to be run past defining inputs
-        # Generate nightly releases if requested (needs stable releases)
-        if generate_initial_nightly:
+        # Create intial nightly releases if requested (needs stable releases)
+        if create_initial_nightly:
             nightly_releases = create_nightly_releases(stable_releases)
 
+    # elif args.type != '':
+
         # Create a development release if requested
-        if args.dev:
+        if args.type == 'dev':
             dev_releases = dev_releases + [create_single_release('dev', args)]
 
         # Create a nightly release if requested
-        if args.nightly:
+        if args.type == 'nightly':
             nightly_releases = nightly_releases + [create_single_release('nightly', args)]
 
         # Create a stable release if requested
-        if args.stable:
+        if args.type == 'stable':
             stable_releases = stable_releases + [create_single_release('stable', args)]
 
         # Create a patch release if requested
-        if args.patch:
+        if args.type == 'patch':
             patch_releases = patch_releases + [create_single_release('patch', args)]
 
     # Set EOL for patch releases based on latest minor versions
