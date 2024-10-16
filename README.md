@@ -42,7 +42,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `release-1312`).
+- **`name`**: A string representing the release name (e.g., `stable-1312`).
 - **`type`**: `stable`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number (e.g. `1312`).
@@ -63,7 +63,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `release-1312.1`).
+- **`name`**: A string representing the release name (e.g., `patch-1312.1`).
 - **`type`**: `patch`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number (e.g. `1312`).
@@ -131,22 +131,22 @@ This ensures that all minor updates within a major release adhere to the same ov
 
 For example:
 
-- **Stable Release `release-1312`**:
+- **Stable Release `stable-1312`**:
   - `released`: 2023-11-16
   - `extended`: 2024-05-03
   - `eol`: 2024-08-03
-- **Patch Release `release-1312.1`**:
+- **Patch Release `patch-1312.1`**:
   - `released`: 2023-11-23
   - `eol`: 2024-01-15 (next patch release date)
-- **Patch Release `release-1312.2`**:
+- **Patch Release `patch-1312.2`**:
   - `released`: 2024-01-15
   - `eol`: 2024-02-14 (next patch release date)
 - ...
-- **Patch Release `release-1312.7`**:
+- **Patch Release `patch-1312.7`**:
   - `released`: 2024-07-03
   - `eol`: 2024-08-03 (inherits from stable release eol)
 
-In this example, the `eol` of `release-1312.1` is set to the `released` date of `release-1312.2`, and the `eol` of the latest patch release (`release-1312.7`) is set to the `eol` of the stable release (`release-1312`).
+In this example, the `eol` of `patch-1312.1` is set to the `released` date of `patch-1312.2`, and the `eol` of the latest patch release (`patch-1312.7`) is set to the `eol` of the stable release (`patch-1312`).
 
 Please note that the `extended` lifecycle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
 
@@ -255,7 +255,7 @@ This will generate/update a release from JSON data and upload it to the default 
 echo '{
   "releases": [
     {
-      "name": "release-1592.1",
+      "name": "patch-1592.1",
       "type": "patch",
       "version": {
         "major": 1592,
