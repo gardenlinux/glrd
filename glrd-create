@@ -365,7 +365,7 @@ def get_garden_version_for_date(release_type, date, existing_releases):
             minor = 0
 
     # DEBUG
-    print(f"New {release_type} version for {date} is {major}.{minor}")
+    # print(f"New {release_type} version for {date} is {major}.{minor}")
 
     return major, minor
 
@@ -405,23 +405,25 @@ def create_initial_releases(releases):
         }
         if release_type == "stable":
             release_data_stable.append(release_info)
-
-        # For patch releases, add git and github data
-        if release_type == "patch":
-            commit, commit_short = get_git_commit_from_tag(tag_name)
-            release_info['version']['minor'] = minor
-            release_info['git'] = {
-                "commit": commit,
-                "commit_short": commit_short
-            }
-            release_info['github'] = {
-                "release": release['html_url']
-            }
-            release_data_patch.append(release_info)
+            print(f"Initial stable release '{release_info['name']}' created.")
+        else:
+            # For patch releases, add git and github data
+            if release_type == "patch":
+                commit, commit_short = get_git_commit_from_tag(tag_name)
+                release_info['version']['minor'] = minor
+                release_info['git'] = {
+                    "commit": commit,
+                    "commit_short": commit_short
+                }
+                release_info['github'] = {
+                    "release": release['html_url']
+                }
+                release_data_patch.append(release_info)
+                print(f"Initial patch release '{release_info['name']}' created.")
 
         if major not in latest_minor_versions or (minor is not None and minor > latest_minor_versions[major]['minor']):
             latest_minor_versions[major] = {
-                'index': len(release_data),
+                'index': len(release_data_patch if release_type == "patch" else release_data_stable) - 1,
                 'minor': minor
             }
 
@@ -459,6 +461,7 @@ def create_initial_nightly_releases(stable_releases):
             "git": {"commit": commit, "commit_short": commit_short}
         }
         release_data.append(release_info)
+        print(f"Initial nightly release '{release_info['name']}' created.")
         date += timedelta(days=1)
 
     return release_data
@@ -575,6 +578,7 @@ def create_single_release(release_type, args, existing_releases):
         release['github'] = {}
         release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
 
+    print(f"Release '{release['name']}' created.")
     return release
 
 def delete_release(args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases):
@@ -795,6 +799,7 @@ def upload_to_s3(file_path, bucket_name, bucket_key):
     s3_client = boto3.client('s3')
     try:
         s3_client.upload_file(file_path, bucket_name, bucket_key)
+        print(f"Uploaded '{file_path}' to 's3://{bucket_name}/{bucket_key}'.")
     except ClientError as e:
         print(f"Error uploading {file_path} to S3: {e}")
         sys.exit(1)
@@ -804,6 +809,7 @@ def download_from_s3(bucket_name, bucket_key, local_file):
     s3_client = boto3.client('s3')
     try:
         s3_client.download_file(bucket_name, bucket_key, local_file)
+        print(f"Downloaded 's3://{bucket_name}/{bucket_key}' to '{local_file}'.")
     except ClientError as e:
         # if e.response['Error']['Code'] == 'NoSuchKey':
         if e.response['Error']['Code'] == '404':
@@ -987,6 +993,7 @@ if __name__ == "__main__":
     if args.no_output_split:
         output_file = args.output_file_prefix
         save_output_file({'releases': merged_releases}, filename=output_file, format=args.output_format)
+        print(f"Release data saved to '{output_file}'.")
 
         # Handle S3 upload if the argument is provided
         if args.s3_update:
@@ -997,6 +1004,7 @@ if __name__ == "__main__":
             output_file = args.output_file_prefix + '-next' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
             save_output_file({'releases': next_releases}, filename=output_file, format=args.output_format)
+            print(f"Next releases saved to '{output_file}'.")
             if args.s3_update:
                 next_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, next_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
@@ -1004,6 +1012,7 @@ if __name__ == "__main__":
             output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
             save_output_file({'releases': stable_releases}, filename=output_file, format=args.output_format)
+            print(f"Stable releases saved to '{output_file}'.")
             if args.s3_update:
                 stable_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, stable_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
@@ -1011,12 +1020,14 @@ if __name__ == "__main__":
             output_file = args.output_file_prefix + '-patch' + '.' + args.output_format
             # Handle S3 upload if the argument is provided
             save_output_file({'releases': patch_releases}, filename=output_file, format=args.output_format)
+            print(f"Patch releases saved to '{output_file}'.")
             if args.s3_update:
                 patch_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, patch_releases)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
         if len(nightly_releases) > 0:
             output_file = args.output_file_prefix + '-nightly' + '.' + args.output_format
             save_output_file({'releases': nightly_releases}, filename=output_file, format=args.output_format)
+            print(f"Nightly releases saved to '{output_file}'.")
             # Handle S3 upload if the argument is provided
             if args.s3_update:
                 nightly_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, nightly_releases)
@@ -1024,6 +1035,7 @@ if __name__ == "__main__":
         if len(dev_releases) > 0:
             output_file = args.output_file_prefix + '-dev' + '.' + args.output_format
             save_output_file({'releases': dev_releases}, filename=output_file, format=args.output_format)
+            print(f"Dev releases saved to '{output_file}'.")
             # Handle S3 upload if the argument is provided
             if args.s3_update:
                 dev_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, dev_releases)
