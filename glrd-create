@@ -870,6 +870,14 @@ def parse_arguments():
     parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
     parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
 
+    args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
+    return args
+
 if __name__ == "__main__":
     # Register the cleanup function to be called on script exit
     atexit.register(cleanup_temp_repo)
