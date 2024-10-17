@@ -913,7 +913,7 @@ if __name__ == "__main__":
             sys.exit("Error: '--delete' can not run with '--no-query'.")
         # if not args.s3_update:
         #     sys.exit("Error: '--delete' requires '--s3-update' to actually update.")
-        delete_release(args, stable_releases, patch_releases, nightly_releases, dev_releases)
+        delete_release(args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases)
 
     else:
         # Create initial stable and patch releases if requested
