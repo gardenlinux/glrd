@@ -284,52 +284,52 @@ def ensure_isodate_and_timestamp(lifecycle):
             # Ensure if 'timestamp' exists, 'isodate' is computed
             elif 'timestamp' in entry and entry['timestamp'] and not entry.get('isodate'):
                 entry['isodate'] = timestamp_to_isodate(entry['timestamp'])
-                
+
 def get_git_commit_at_time(date, time="08:00", branch="main", remote_repo="https://github.com/gardenlinux/gardenlinux"):
     """Fetch the git commit that was at a specific date and time in the main branch, using a temporary cached git clone."""
     global repo_clone_path
-    
+
     # Convert the input date and time to the target timezone (UTC) and then to UTC
     target_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").astimezone(pytz.timezone('UTC'))
     target_time_utc = target_time.astimezone(pytz.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
-    
+
     # If the repository hasn't been cloned yet, clone it to a dynamically created temp directory
     if not repo_clone_path:
         # Create a temporary directory for cloning the repository
         temp_dir = tempfile.mkdtemp(prefix="glrd_temp_repo_")
-        
+
         # Perform the shallow clone
         clone_command = ["git", "clone", "--depth", "1", "--branch", branch, remote_repo, temp_dir]
         clone_result = subprocess.run(clone_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
+
         if clone_result.returncode != 0:
             sys.exit(f"Error cloning remote repository: {clone_result.stderr}")
-        
+
         # Fetch full history to enable searching through commits by time
         fetch_command = ["git", "fetch", "--unshallow"]
         fetch_result = subprocess.run(fetch_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=temp_dir)
-        
+
         if fetch_result.returncode != 0:
             sys.exit(f"Error fetching full history from remote repository: {fetch_result.stderr}")
-        
+
         # Cache the clone path to reuse it later
         repo_clone_path = temp_dir
-    
+
     # Use `git rev-list` to find the commit before the specified time
     rev_list_command = ["git", "rev-list", "-n", "1", "--before", target_time_utc, branch]
     rev_list_result = subprocess.run(rev_list_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=repo_clone_path)
-    
+
     if rev_list_result.returncode != 0:
         sys.exit(f"Error fetching git commit for {date} at {time}: {rev_list_result.stderr}")
-    
+
     commit = rev_list_result.stdout.strip()
 
     # DEBUG
     # print(f"Found commit {commit} for {date} at {time}")
-    
+
     if not commit:
         sys.exit(f"No commit found for {date} at {time}")
-    
+
     return commit, commit[:7]
 
 def get_garden_version_for_date(release_type, date, existing_releases):
@@ -440,7 +440,7 @@ def create_initial_nightly_releases(stable_releases):
     else:
         print("No stable releases found in the generated data. Using default start date.")
         start_date = start_date_default
-    
+
     tz = pytz.timezone('UTC')
     start_date = tz.localize(start_date)
     current_date = datetime.now(tz)
@@ -475,7 +475,7 @@ def create_single_release(release_type, args, existing_releases):
     else:
         tz = pytz.timezone('UTC')
         release_date = tz.localize(datetime.now())
-    
+
     lifecycle_released_isodate = release_date.strftime('%Y-%m-%d')
     lifecycle_released_timestamp = int(release_date.timestamp())
 
@@ -624,7 +624,7 @@ def merge_input_data(auto_data, manual_data):
 
 
 def set_latest_minor_eol_to_major(stable_releases, patch_releases):
-    """Set the EOL of each minor version to the next higher minor version, 
+    """Set the EOL of each minor version to the next higher minor version,
     and the EOL of the latest minor version to match the stable release."""
     releases_by_major = {}
 
@@ -659,7 +659,7 @@ def load_input(filename):
     """Load manual input from a file if it exists."""
     try:
         input_data = yaml.safe_load(open(filename, 'r'))
-        
+
         merged_releases = input_data.get('releases', [])
         if len(merged_releases) == 0:
             sys.exit(f"Error, no releases found in JSON from file")
@@ -743,7 +743,7 @@ def save_output_file(data, filename, format="yaml"):
             yaml.dump(data, file, default_flow_style=False, sort_keys=False)
         else:
             # Optimize JSON by removing unnecessary spaces
-            json.dump(data, file, separators=(',', ':'), ensure_ascii=False)            
+            json.dump(data, file, separators=(',', ':'), ensure_ascii=False)
 
 def create_s3_bucket(bucket_name, region):
     """Create an S3 bucket in a specified region."""
@@ -772,7 +772,7 @@ def create_s3_bucket(bucket_name, region):
                 'RestrictPublicBuckets': False
             }
         )
-        print(f"Public access block settings disabled for bucket '{bucket_name}'.")        
+        print(f"Public access block settings disabled for bucket '{bucket_name}'.")
         public_policy = {
             "Version": "2012-10-17",
             "Statement": [
@@ -843,9 +843,9 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
 
 def parse_arguments():
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in th GLRD.")
+    parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in the GLRD.")
     parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
-    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")    
+    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
     parser.add_argument('--type', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
     parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
     parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
@@ -859,12 +859,11 @@ def parse_arguments():
     parser.add_argument('--output-file-prefix', type=str, default="releases", help="The prefix added to the output file (default: releases).")
     parser.add_argument('--output-format', type=str, choices=['yaml', 'json'], default='json', help="Output format: 'yaml' or 'json' (default: json).")
     parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
-    parser.add_argument('--s3-bucket-name', type=str, default="gardenlinux-releases", help="Name of S3 bucket. Defaults to 'gardenlinux-releases'.")    
-    parser.add_argument('--s3-bucket-prefix', type=str, default="", help="Prefix inside S3 bucket. Defaults to ''.")    
-    parser.add_argument('--s3-bucket-region', type=str, default="eu-central-1", help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")    
-    parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")    
-    parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")    
-    return parser.parse_args()
+    parser.add_argument('--s3-bucket-name', type=str, default="gardenlinux-releases", help="Name of S3 bucket. Defaults to 'gardenlinux-releases'.")
+    parser.add_argument('--s3-bucket-prefix', type=str, default="", help="Prefix inside S3 bucket. Defaults to ''.")
+    parser.add_argument('--s3-bucket-region', type=str, default="eu-central-1", help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")
+    parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
+    parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
 
 if __name__ == "__main__":
     # Register the cleanup function to be called on script exit
@@ -879,7 +878,7 @@ if __name__ == "__main__":
         bucket_name = args.s3_bucket_name
         bucket_prefix = args.s3_bucket_prefix
 
-    # Parse the --generate-initial-releases argument
+    # Parse the --create-initial-releases argument
     create_initial_stable = False
     create_initial_patch = False
     create_initial_nightly = False
@@ -910,7 +909,7 @@ if __name__ == "__main__":
 
     if args.delete:
         if args.no_query:
-            sys.exit("Error: '--delete' can not run with '--no-query'.")
+            sys.exit("Error: '--delete' cannot run with '--no-query'.")
         # if not args.s3_update:
         #     sys.exit("Error: '--delete' requires '--s3-update' to actually update.")
         delete_release(args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases)
@@ -934,7 +933,7 @@ if __name__ == "__main__":
             dev_releases = merge_input_data(dev_releases, input_dev)
 
         # we define stable releases in input file, therefore this has to be run past defining inputs
-        # Create intial nightly releases if requested (needs stable releases)
+        # Create initial nightly releases if requested (needs stable releases)
         if create_initial_nightly:
             nightly_releases = create_initial_nightly_releases(stable_releases)
 
