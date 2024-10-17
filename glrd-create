@@ -16,6 +16,7 @@ import os
 import sys
 import atexit
 import shutil
+from deepdiff import DeepDiff
 
 # JSON schema for stable, patch, and nightly releases
 schemas = {
@@ -611,20 +612,17 @@ def delete_release(args, next_releases, stable_releases, patch_releases, nightly
 
     print(f"Release '{args.delete}' will be deleted.")
 
-def merge_input_data(auto_data, manual_data):
-    """Merge two lists of release data, avoiding duplicates."""
-    # Assuming auto_data and manual_data are both lists
-    merged_data = auto_data[:]  # Start with a copy of auto_data
+def merge_input_data(existing_releases, new_releases):
+    """Merge two lists of releases, updating existing releases with new releases."""
+    # Create a dictionary of releases by name from existing_releases
+    releases_by_name = {release['name']: release for release in existing_releases}
 
-    # Add releases from manual_data to auto_data if they do not already exist
-    for manual_release in manual_data:
-       # Avoid adding duplicates by checking the 'name' field
-       if not any(auto_release['name'] == manual_release['name'] for auto_release in auto_data):
-           merged_data.append(manual_release)
+    # Update or add releases from new_data
+    for new_release in new_releases:
+        releases_by_name[new_release['name']] = new_release
 
-    return merged_data
-
-
+    # Return the merged list of releases
+    return list(releases_by_name.values())
 
 def set_latest_minor_eol_to_major(stable_releases, patch_releases):
     """Set the EOL of each minor version to the next higher minor version,
@@ -722,22 +720,75 @@ def parse_release_name(release_name):
         sys.exit("Error: Major and minor versions must be integers.")
     return release_type, major, minor
 
-def validate_release_data(release):
+def validate_release_data(release, errors):
     """Validate release data using the appropriate JSON schema."""
     schema = schemas.get(release['type'])
     if not schema:
-        sys.exit(f"Unknown release type: {release['type']}")
+        error_message = f"Unknown release type: {release['type']}"
+        logging.error(error_message)
+        errors.append(error_message)
+        return False
     try:
         validate(instance=release, schema=schema)
+        return True
     except ValidationError as e:
         # Construct the field path that caused the validation error
         field_path = '.'.join([str(p) for p in e.absolute_path])
-        sys.exit(f"Validation error for release {release['name']} at '{field_path}': {e.message}")
+        error_message = f"Validation error for release '{release['name']}' at '{field_path}': {e.message}"
+        logging.error(error_message)
+        errors.append(error_message)
+        return False
 
 def validate_all_releases(releases):
-    """Validate all releases."""
+    """Validate all releases and exit if any validation errors are found."""
+    errors = []
     for release in releases:
-        validate_release_data(release)
+        validate_release_data(release, errors)
+    if errors:
+        print(f"Validation failed for {len(errors)} release(s). Exiting.")
+        sys.exit(1)
+
+def diff_releases(existing_merged_releases, merged_releases):
+    """Show which releases will be created, deleted, or updated."""
+    existing_releases_by_name = {r['name']: r for r in existing_merged_releases}
+    new_releases_by_name = {r['name']: r for r in merged_releases}
+
+    existing_merged_release_names = set(existing_releases_by_name.keys())
+    merged_release_names = set(new_releases_by_name.keys())
+
+    releases_to_create = merged_release_names - existing_merged_release_names
+    releases_to_delete = existing_merged_release_names - merged_release_names
+    releases_to_check = merged_release_names & existing_merged_release_names
+
+    for release_name in releases_to_create:
+        print(f"{release_name} - release will be created.")
+
+    for release_name in releases_to_delete:
+        print(f"{release_name} - release will be deleted.")
+
+    for release_name in releases_to_check:
+        existing_release = existing_releases_by_name[release_name]
+        new_release = new_releases_by_name[release_name]
+
+        # Perform deep comparison
+        diff = DeepDiff(existing_release, new_release, ignore_order=True)
+
+        if diff:
+            print(f"{release_name} - release will be updated.")
+            release_name = new_release['name']
+            for change_type, changes in diff.items():
+                if change_type == 'values_changed':
+                    for path, change in changes.items():
+                        formatted_path = path.replace("root", "")
+                        print(f"{release_name} - {change_type}: {formatted_path} changed from '{change['old_value']}' to '{change['new_value']}'")
+                elif change_type == 'type_changes':
+                    for path, change in changes.items():
+                        formatted_path = path.replace("root", "")
+                        print(f"{release_name} - {change_type}: {formatted_path} type changed from '{change['old_type']}' to '{change['new_type']}'")
+                else:
+                    for path, change in changes.items():
+                        formatted_path = path.replace("root", "")
+                        print(f"{release_name} - {change_type}: {formatted_path}")
 
 def save_output_file(data, filename, format="yaml"):
     """Save the data to a file in the specified format."""
@@ -841,7 +892,7 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
         new_releases = new_data if isinstance(new_data, list) else new_data.get('releases', [])
 
         # Use the merge function to merge new and existing releases
-        merged_releases = merge_input_data(new_releases, existing_releases)
+        merged_releases = merge_input_data(existing_releases, new_releases)
 
         # Return the merged data as a list
         return merged_releases
@@ -902,6 +953,12 @@ if __name__ == "__main__":
         create_initial_nightly = 'nightly' in create_initial_list
 
     # Variables to store inputs, dev/stable/patch releases and nightly releases
+    existing_next_releases = []
+    existing_stable_releases = []
+    existing_patch_releases = []
+    existing_nightly_releases = []
+    existing_dev_releases = []
+    existing_merged_releases = []
     next_releases = []
     stable_releases = []
     patch_releases = []
@@ -911,11 +968,17 @@ if __name__ == "__main__":
 
     if not args.no_query:
         # Execute glrd command to fill stable, patch, nightly, and dev releases
-        next_releases = glrd_query_type("next")
-        stable_releases = glrd_query_type("stable")
-        patch_releases = glrd_query_type("patch")
-        nightly_releases = glrd_query_type("nightly")
-        dev_releases = glrd_query_type("dev")
+        existing_next_releases = glrd_query_type("next")
+        existing_stable_releases = glrd_query_type("stable")
+        existing_patch_releases = glrd_query_type("patch")
+        existing_nightly_releases = glrd_query_type("nightly")
+        existing_dev_releases = glrd_query_type("dev")
+        existing_merged_releases = existing_next_releases + existing_stable_releases + existing_patch_releases + existing_nightly_releases + existing_dev_releases
+        next_releases.extend(existing_next_releases)
+        stable_releases.extend(existing_stable_releases)
+        patch_releases.extend(existing_patch_releases)
+        nightly_releases.extend(existing_nightly_releases)
+        dev_releases.extend(existing_dev_releases)
 
     if not args.s3_update:
         print(f"Warning: '--s3-update' was not passed, skipping S3 update.")
@@ -950,32 +1013,30 @@ if __name__ == "__main__":
         if create_initial_nightly:
             nightly_releases = create_initial_nightly_releases(stable_releases)
 
-    # elif args.type != '':
-
         # Create a next release if requested
         if args.type == 'next':
             release = create_single_release('next', args, next_releases)
-            next_releases = merge_input_data([release], next_releases)
+            next_releases = merge_input_data(next_releases, [release])
 
         # Create a stable release if requested
         if args.type == 'stable':
             release = create_single_release('stable', args, stable_releases)
-            stable_releases = merge_input_data([release], stable_releases)
+            stable_releases = merge_input_data(stable_releases, [release])
 
         # Create a patch release if requested
         if args.type == 'patch':
             release = create_single_release('patch', args, patch_releases)
-            patch_releases = merge_input_data([release], patch_releases)
+            patch_releases = merge_input_data(patch_releases, [release])
 
         # Create a nightly release if requested
         if args.type == 'nightly':
             release = create_single_release('nightly', args, nightly_releases)
-            nightly_releases = merge_input_data([release], nightly_releases)
+            nightly_releases = merge_input_data(nightly_releases, [release])
 
         # Create a development release if requested
         if args.type == 'dev':
             release = create_single_release('dev', args, dev_releases)
-            dev_releases = merge_input_data([release], dev_releases)
+            dev_releases = merge_input_data(dev_releases, [release])
 
     # Set EOL for patch releases based on latest minor versions
     set_latest_minor_eol_to_major(stable_releases, patch_releases)
