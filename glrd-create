@@ -991,7 +991,6 @@ if __name__ == "__main__":
             merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
             upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")            
     else:
-        print(next_releases)
         if len(next_releases) > 0:
             output_file = args.output_file_prefix + '-next' + '.' + args.output_format
             # Handle S3 upload if the argument is provided

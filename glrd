@@ -173,8 +173,6 @@ def format_shell(rows, headers, no_header):
     if not no_header:
         print("\t".join([f"{header:<20}" for header in headers]))
     for row in rows:
-        # print("\t".join([f"{col:<20}" for col in row]))
-        # print("\t".join([f"{str(col) if col is not None else 'N/A':<20}" for col in row]))
         print("\t".join([f"{str(col) if col is not None else 'foo':<20}" for col in row]))
 
 def filter_fields(headers, rows, fields):
