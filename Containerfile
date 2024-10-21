@@ -33,9 +33,9 @@ ENV VIRTUAL_ENV="$VIRTUAL_ENV_PARENT/.venv"
 RUN ${PYTHON} -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-COPY requirements.txt "$VIRTUAL_ENV_PARENT/"
-COPY glrd glrd-create releases-input.yaml /usr/local/bin
+COPY . /usr/local/glrd
 # Do not use --system, we want the pip from the virtual env
-RUN cd "$VIRTUAL_ENV_PARENT" && pip install -r requirements.txt
-WORKDIR /usr/local/bin
+# RUN cd "$VIRTUAL_ENV_PARENT" && pip install -r requirements.txt
+RUN pip install -e /usr/local/glrd
+WORKDIR /usr/local/glrd
 ENTRYPOINT ["/usr/bin/sh", "-c"]

@@ -1,6 +1,11 @@
+*.egg-info
+**/__pycache__
 .envrc
 .venv
+_build
 shell.nix
+releases.json
+releases.yaml
 releases-*.json
 releases-*.yaml
 !releases-input.yaml

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse
 import json
 import pytz
@@ -16,19 +14,11 @@ import logging
 from deepdiff import DeepDiff
 from botocore.exceptions import ClientError
 from jsonschema import validate, ValidationError
+from glrd.util import *
+from glrd.query import load_all_releases
 
-# Definition of error codes
-ERROR_CODES = {
-    "generic_error": 1,
-    "parameter_missing": 2,
-    "subprocess_output_error": 100,
-    "subprocess_output_missing": 110,
-    "input_parameter_error": 101,
-    "input_parameter_missing": 111,
-    "s3_output_error": 102,
-    "s3_output_missing": 112,
-    "validation_error": 200,
-}
+# silence boto3 logging
+boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
 
 # JSON schema for stable, patch, and nightly releases
 SCHEMAS = {
@@ -215,6 +205,8 @@ SCHEMAS = {
         "required": ["name", "type", "version", "lifecycle", "git"]
     }
 }
+# Availanle release types
+RELEASE_TYPES = ['next', 'stable', 'patch', 'nightly', 'dev']
 
 # Global variable to store the path of the cloned gardenlinux repository (cached)
 repo_clone_path = None
@@ -226,22 +218,12 @@ def cleanup_temp_repo():
         shutil.rmtree(repo_clone_path)
 
 def glrd_query_type(release_type):
-    """Execute glrd command to retrieve releases of a specific type."""
-    command = ["./glrd", "--output-type", "json", "--type", release_type]
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if result.returncode != 0:
-        logging.error(f"Error executing glrd command: {result.stderr}")
-        sys.exit(ERROR_CODES["subprocess_output_error"])
-    return json.loads(result.stdout)
-
-def get_git_root():
-    """Get the root directory of the current git repository."""
-    command = ["git", "rev-parse", "--show-toplevel"]
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if result.returncode != 0:
-        logging.error(f"Error finding git root: {result.stderr}")
-        sys.exit(ERROR_CODES["subprocess_output_error"])
-    return result.stdout.strip()
+    """Retrieve releases of a specific type."""
+    releases = load_all_releases(release_type, DEFAULTS['DEFAULT_QUERY_INPUT_TYPE'], DEFAULTS['DEFAULT_QUERY_INPUT_URL'], DEFAULTS['DEFAULT_QUERY_INPUT_FILE_PREFIX'], DEFAULTS['DEFAULT_QUERY_INPUT_FORMAT'])
+    if not releases:
+        logging.error(f"Error retrieving releases: {result.stderr}")
+        sys.exit(ERROR_CODES["query_error"])
+    return releases
 
 def get_github_releases():
     """Fetch releases from the GitHub API using the 'gh' command."""
@@ -270,21 +252,6 @@ def get_git_commit_from_tag(tag):
     except Exception as e:
         logging.error(f"Error fetching git commit for tag {tag}: {e}")
         sys.exit(ERROR_CODES["subprocess_output_error"])
-
-def extract_version_data(tag_name):
-    """Extract major and minor version numbers from a tag."""
-    version_regex = re.compile(r'^(\d+)\.?(\d+)?$')
-    match = version_regex.match(tag_name)
-    return (int(match.group(1)), int(match.group(2))) if match else (None, None)
-
-def isodate_to_timestamp(isodate):
-    """Convert ISO date to timestamp."""
-    return int(datetime.strptime(isodate, "%Y-%m-%d").timestamp())
-
-def timestamp_to_isodate(timestamp):
-    """Convert timestamp to ISO date."""
-    dt = datetime.utcfromtimestamp(timestamp)
-    return dt.strftime("%Y-%m-%d")
 
 def ensure_isodate_and_timestamp(lifecycle):
     """
@@ -451,7 +418,7 @@ def create_initial_nightly_releases(stable_releases):
     release_type = "nightly"
 
     start_date_default = datetime(2020, 6, 9)
-    if len(stable_releases) > 0:  # If stable/patch releases were generated
+    if stable_releases:
         first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
         start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp'])
     else:
@@ -484,10 +451,10 @@ def create_initial_nightly_releases(stable_releases):
 
 def create_single_release(release_type, args, existing_releases):
     """Generate a release using the release_type, current timestamp and git info, or using provided arguments."""
-    # Check if a manual date-time-released is provided, otherwise use the current date
-    if args.date_time_released:
+    # Check if a manual lifecycle-released-isodatetime is provided, otherwise use the current date
+    if args.lifecycle_released_isodatetime:
         try:
-            release_date = datetime.strptime(args.date_time_released, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            release_date = datetime.strptime(args.lifecycle_released_isodatetime, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
         except ValueError:
             logging.error("Error: Invalid --date-time-release format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
             sys.exit(ERROR_CODES["validation_error"])
@@ -498,25 +465,25 @@ def create_single_release(release_type, args, existing_releases):
     lifecycle_released_isodate = release_date.strftime('%Y-%m-%d')
     lifecycle_released_timestamp = int(release_date.timestamp())
 
-    if args.date_time_extended:
+    if args.lifecycle_extended_isodatetime:
         try:
-            extended_date = datetime.strptime(args.date_time_extended, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            extended_date = datetime.strptime(args.lifecycle_extended_isodatetime, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
             lifecycle_extended_isodate = extended_date.strftime('%Y-%m-%d')
             lifecycle_extended_timestamp = int(extended_date.timestamp())
         except ValueError:
-            logging.error("Error: Invalid --date-time-extended format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
+            logging.error("Error: Invalid --lifecycle-extended-isodatetime format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
             sys.exit(ERROR_CODES["validation_error"])
     else:
         lifecycle_extended_isodate = None
         lifecycle_extended_timestamp = None
 
-    if args.date_time_eol:
+    if args.lifecycle_eol_isodatetime:
         try:
-            eol_date = datetime.strptime(args.date_time_eol, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+            eol_date = datetime.strptime(args.lifecycle_eol_isodatetime, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
             lifecycle_eol_isodate = eol_date.strftime('%Y-%m-%d')
             lifecycle_eol_timestamp = int(eol_date.timestamp())
         except ValueError:
-            logging.error("Error: Invalid --date-time-eol format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
+            logging.error("Error: Invalid --lifecycle-eol-isodatetime format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
             sys.exit(ERROR_CODES["validation_error"])
     else:
         lifecycle_eol_isodate = None
@@ -533,10 +500,10 @@ def create_single_release(release_type, args, existing_releases):
         commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
 
     # Check if a manual version is provided, otherwise use garden version for the date
-    if args.type == 'next':
+    if args.create == 'next':
         major = 'next'
         minor = None
-    elif args.version and args.type == 'stable':
+    elif args.version and args.create == 'stable':
         # For 'stable' releases, version should not contain '.'
         if '.' in args.version:
             logging.error("Error: Invalid --version format for stable release. Use format: major (integer without '.')")
@@ -547,7 +514,7 @@ def create_single_release(release_type, args, existing_releases):
         except ValueError:
             logging.error("Error: Invalid --version format. Major version must be an integer.")
             sys.exit(ERROR_CODES["validation_error"])
-    elif args.version and args.type != 'stable':
+    elif args.version and args.create != 'stable':
         # For other releases, version should be 'major.minor'
         try:
             major, minor = map(int, args.version.split('.'))
@@ -634,7 +601,7 @@ def delete_release(args, next_releases, stable_releases, patch_releases, nightly
         logging.error(f"Error: Release '{args.delete}' not found in the existing data.")
         sys.exit(ERROR_CODES["validation_error"])
 
-    logging.info(f"Release '{args.delete}' will be deleted.")
+    logging.debug(f"Release '{args.delete}' will be deleted.")
 
 def merge_input_data(existing_releases, new_releases):
     """Merge two lists of releases, updating existing releases with new releases."""
@@ -686,7 +653,7 @@ def load_input(filename):
         input_data = yaml.safe_load(open(filename, 'r'))
 
         merged_releases = input_data.get('releases', [])
-        if len(merged_releases) == 0:
+        if  len(merged_releases) == 0:
             logging.error(f"Error, no releases found in JSON from file")
             sys.exit(ERROR_CODES["input_parameter_missing"])
         next_releases = [r for r in merged_releases if r['type'] == 'next']
@@ -888,7 +855,7 @@ def upload_to_s3(file_path, bucket_name, bucket_key):
     s3_client = boto3.client('s3')
     try:
         s3_client.upload_file(file_path, bucket_name, bucket_key)
-        logging.info(f"Uploaded '{file_path}' to 's3://{bucket_name}/{bucket_key}'.")
+        logging.debug(f"Uploaded '{file_path}' to 's3://{bucket_name}/{bucket_key}'.")
     except ClientError as e:
         logging.error(f"Error uploading {file_path} to S3: {e}")
         sys.exit(ERROR_CODES["s3_output_error"])
@@ -898,7 +865,7 @@ def download_from_s3(bucket_name, bucket_key, local_file):
     s3_client = boto3.client('s3')
     try:
         s3_client.download_file(bucket_name, bucket_key, local_file)
-        logging.info(f"Downloaded 's3://{bucket_name}/{bucket_key}' to '{local_file}'.")
+        logging.debug(f"Downloaded 's3://{bucket_name}/{bucket_key}' to '{local_file}'.")
     except ClientError as e:
         if e.response['Error']['Code'] == '404':
             logging.warning(f"No existing file found at 's3://{bucket_name}/{bucket_key}', starting with a fresh file.")
@@ -934,59 +901,14 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
         # Return the merged data as a list
         return merged_releases
 
-def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in the GLRD.")
-    parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
-    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
-    parser.add_argument('--type', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
-    parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
-    parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
-    parser.add_argument('--date-time-released', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
-    parser.add_argument('--date-time-extended', type=str, help="Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
-    parser.add_argument('--date-time-eol', type=str, help="Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
-    parser.add_argument('--no-query', action='store_true', help="Do not query and use existing releases using glrd command. Be careful, this can delete your releases.")
-    parser.add_argument('--input-stdin', action='store_true', help="Process a single input from stdin (JSON data).")
-    parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
-    parser.add_argument('--input-file', type=str, default="releases-input.yaml", help="The name of the input file (default: releases-input.yaml).")
-    parser.add_argument('--output-file-prefix', type=str, default="releases", help="The prefix added to the output file (default: releases).")
-    parser.add_argument('--output-format', type=str, choices=['yaml', 'json'], default='json', help="Output format: 'yaml' or 'json' (default: json).")
-    parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
-    parser.add_argument('--s3-bucket-name', type=str, default="gardenlinux-releases", help="Name of S3 bucket. Defaults to 'gardenlinux-releases'.")
-    parser.add_argument('--s3-bucket-prefix', type=str, default="", help="Prefix inside S3 bucket. Defaults to ''.")
-    parser.add_argument('--s3-bucket-region', type=str, default="eu-central-1", help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")
-    parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
-    parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
-    parser.add_argument('--log-level', type=str, choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'], default='INFO', help="Set the logging level (default: INFO).")
+def handle_releases(args):
+    """Handle the creation and deletion of initial or single releases."""
+    if not args.s3_update:
+        logging.warning(f"'--s3-update' was not passed, skipping S3 update.")
 
-    args = parser.parse_args()
-
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(ERROR_CODES["parameter_missing"])
-
-    return args
-
-if __name__ == "__main__":
-    # Register the cleanup function to be called on script exit
-    atexit.register(cleanup_temp_repo)
-
-    args = parse_arguments()
-
-    # Configure logging based on the --log-level argument
-    logging.basicConfig(level=args.log_level, format='%(levelname)s: %(message)s')
-
-    if args.s3_create_bucket:
-        create_s3_bucket(args.s3_bucket_name, args.s3_bucket_region)
-
-    if args.s3_update:
-        bucket_name = args.s3_bucket_name
-        bucket_prefix = args.s3_bucket_prefix
-
-    # Parse the --create-initial-releases argument
-    create_initial_stable = False
-    create_initial_patch = False
-    create_initial_nightly = False
+    create_initial_stable, create_initial_patch, create_initial_nightly = False, False, False
+    next_releases, stable_releases, patch_releases, nightly_releases, dev_releases = [], [], [], [], []
+    
     if args.create_initial_releases:
         create_initial_list = args.create_initial_releases.split(',')
         create_initial_stable = 'stable' in create_initial_list
@@ -1021,9 +943,6 @@ if __name__ == "__main__":
         nightly_releases.extend(existing_nightly_releases)
         dev_releases.extend(existing_dev_releases)
 
-    if not args.s3_update:
-        logging.warning(f"'--s3-update' was not passed, skipping S3 update.")
-
     if args.delete:
         if args.no_query:
             logging.error("Error: '--delete' cannot run with '--no-query'.")
@@ -1031,10 +950,10 @@ if __name__ == "__main__":
         delete_release(args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases)
 
     else:
-        # Create initial stable and patch releases if requested
         if create_initial_stable or create_initial_patch:
             github_releases = get_github_releases()
             stable_releases, patch_releases, latest_minor_versions = create_initial_releases(github_releases)
+
 
         # Add stdin input or file input data if provided (existing releases will be overwritten)
         if args.input_stdin or args.input:
@@ -1054,27 +973,27 @@ if __name__ == "__main__":
             nightly_releases = create_initial_nightly_releases(stable_releases)
 
         # Create a next release if requested
-        if args.type == 'next':
+        if args.create == 'next':
             release = create_single_release('next', args, next_releases)
             next_releases = merge_input_data(next_releases, [release])
 
         # Create a stable release if requested
-        if args.type == 'stable':
+        if args.create == 'stable':
             release = create_single_release('stable', args, stable_releases)
             stable_releases = merge_input_data(stable_releases, [release])
 
         # Create a patch release if requested
-        if args.type == 'patch':
+        if args.create == 'patch':
             release = create_single_release('patch', args, patch_releases)
             patch_releases = merge_input_data(patch_releases, [release])
 
         # Create a nightly release if requested
-        if args.type == 'nightly':
+        if args.create == 'nightly':
             release = create_single_release('nightly', args, nightly_releases)
             nightly_releases = merge_input_data(nightly_releases, [release])
 
         # Create a development release if requested
-        if args.type == 'dev':
+        if args.create == 'dev':
             release = create_single_release('dev', args, dev_releases)
             dev_releases = merge_input_data(dev_releases, [release])
 
@@ -1100,55 +1019,68 @@ if __name__ == "__main__":
 
     diff_releases(existing_merged_releases, merged_releases)
 
-    # Save the release data to disk
+    store_releases(args, merged_releases)
+
+def store_releases(args, merged_releases):
+    """Store releases in splitted or not splitted output."""
     if args.no_output_split:
-        output_file = args.output_file_prefix
-        save_output_file({'releases': merged_releases}, filename=output_file, format=args.output_format)
-        logging.debug(f"Release data saved to '{output_file}'.")
-
-        # Handle S3 upload if the argument is provided
-        if args.s3_update:
-            merged_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, merged_releases)
-            upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+        handle_output(args, args.s3_bucket_name, args.s3_bucket_prefix, merged_releases)
     else:
-        if len(next_releases) > 0:
-            output_file = args.output_file_prefix + '-next' + '.' + args.output_format
-            # Handle S3 upload if the argument is provided
-            save_output_file({'releases': next_releases}, filename=output_file, format=args.output_format)
-            logging.debug(f"Next releases saved to '{output_file}'.")
-            if args.s3_update:
-                next_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, next_releases)
-                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if len(stable_releases) > 0:
-            output_file = args.output_file_prefix + '-stable' + '.' + args.output_format
-            # Handle S3 upload if the argument is provided
-            save_output_file({'releases': stable_releases}, filename=output_file, format=args.output_format)
-            logging.debug(f"Stable releases saved to '{output_file}'.")
-            if args.s3_update:
-                stable_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, stable_releases)
-                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if len(patch_releases) > 0:
-            output_file = args.output_file_prefix + '-patch' + '.' + args.output_format
-            # Handle S3 upload if the argument is provided
-            save_output_file({'releases': patch_releases}, filename=output_file, format=args.output_format)
-            logging.debug(f"Patch releases saved to '{output_file}'.")
-            if args.s3_update:
-                patch_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, patch_releases)
-                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if len(nightly_releases) > 0:
-            output_file = args.output_file_prefix + '-nightly' + '.' + args.output_format
-            save_output_file({'releases': nightly_releases}, filename=output_file, format=args.output_format)
-            logging.debug(f"Nightly releases saved to '{output_file}'.")
+        handle_splitted_output(args, args.s3_bucket_name, args.s3_bucket_prefix, merged_releases)
+
+def handle_splitted_output(args, bucket_name, bucket_prefix, releases):
+    """Handle output of splitted releases (next, stable, patch, nightly, dev) to disk and S3."""
+    for release_type in RELEASE_TYPES:
+        releases_filtered = [r for r in releases if r['type'] == release_type]
+        if releases_filtered:
+            output_file = f"{args.output_file_prefix}-{release_type}.{args.output_format}"
+            save_output_file({'releases': releases_filtered}, filename=output_file, format=args.output_format)
+
             # Handle S3 upload if the argument is provided
             if args.s3_update:
-                nightly_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, nightly_releases)
-                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
-        if len(dev_releases) > 0:
-            output_file = args.output_file_prefix + '-dev' + '.' + args.output_format
-            save_output_file({'releases': dev_releases}, filename=output_file, format=args.output_format)
-            logging.debug(f"Dev releases saved to '{output_file}'.")
-            # Handle S3 upload if the argument is provided
-            if args.s3_update:
-                dev_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, dev_releases)
+                releases_filtered = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, releases_filtered)
                 upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
 
+def handle_output(args, bucket_name, bucket_prefix, releases):
+    """Handle output of not splitted releases to disk and S3."""
+    output_file = f"{args.output_file_prefix}.{args.output_format}"
+    save_output_file({'releases': releases}, filename=output_file, format=args.output_format)
+    logging.debug(f"Release data saved to '{output_file}'.")
+
+    # Handle S3 upload if the argument is provided
+    if args.s3_update:
+        merged_releases = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, releases)
+        upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in the GLRD.")
+    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
+    parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
+    parser.add_argument('--create', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
+    parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
+    parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
+    parser.add_argument('--lifecycle-released-isodatetime', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
+    parser.add_argument('--lifecycle-extended-isodatetime', type=str, help="Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
+    parser.add_argument('--lifecycle-eol-isodatetime', type=str, help="Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
+    parser.add_argument('--no-query', action='store_true', help="Do not query and use existing releases using glrd command. Be careful, this can delete your releases.")
+    parser.add_argument('--input-stdin', action='store_true', help="Process a single input from stdin (JSON data).")
+    parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
+    parser.add_argument('--input-file', type=str, default=DEFAULTS['DEFAULT_MANAGE_INPUT_FILE'], help="The name of the input file (default: releases-input.yaml).")
+    parser.add_argument('--output-file-prefix', type=str, default=DEFAULTS['DEFAULT_MANAGE_OUTPUT_FILE_PREFIX'], help="The prefix added to the output file (default: releases).")
+    parser.add_argument('--output-format', type=str, choices=['yaml', 'json'], default=DEFAULTS['DEFAULT_MANAGE_OUTPUT_FORMAT'], help="Output format: 'yaml' or 'json' (default: json).")
+    parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
+    parser.add_argument('--s3-bucket-name', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_NAME'], help="Name of S3 bucket. Defaults to 'gardenlinux-releases'.")
+    parser.add_argument('--s3-bucket-prefix', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_PREFIX'], help="Prefix inside S3 bucket. Defaults to ''.")
+    parser.add_argument('--s3-bucket-region', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_REGION'], help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")
+    parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
+    parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
+    parser.add_argument('--log-level', type=str, choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'], default='INFO', help="Set the logging level (default: INFO).")
+
+    args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(ERROR_CODES["parameter_missing"])
+
+    return args
