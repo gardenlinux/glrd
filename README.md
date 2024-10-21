@@ -428,7 +428,27 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 ### Lifecycle Dependencies
 
-The lifecycle fields in the release schemas help track the release dates and end-of-life (EOL) dates for each release. There is a dependency between the `lifecycle` fields of **stable** and **patch** releases:
+The lifecycle fields in the release schemas help track the release dates, extended maintenance dates and end-of-life (EOL) dates for each release.
+
+### Default Stable dates
+
+The defaults for `extended` and `eol` dates are based on the [Garden Linux Release Plan Overview](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md) and defined to be:
+
+- `extended`
+  - `released` + 6 month
+- `eol`
+  - `released` + 9 month
+
+For example:
+
+- **Stable Release `stable-1443`**:
+  - `released`: 2024-03-13
+  - `extended`: 2024-09-13
+  - `eol`: 2025-01-13
+
+### Stable and Patch releases
+
+There is a dependency between the `lifecycle` fields of **stable** and **patch** releases:
 
 - **EOL of Patch Releases**: The `eol` date of a patch release is set to the `released` date of the next patch release. If there is no subsequent patch release, the `eol` date is aligned with the `eol` date of the corresponding stable release.
 - **EOL of Latest Patch Release**: The latest patch release's `eol` date matches the `eol` date of the stable release.
@@ -456,6 +476,10 @@ For example:
 In this example, the `eol` of `patch-1312.1` is set to the `released` date of `patch-1312.2`, and the `eol` of the latest patch release (`patch-1312.7`) is set to the `eol` of the stable release (`patch-1312`).
 
 Please note that the `extended` lifecycle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
+
+### Nightly an Dev dates
+
+Due to the nature of the `nightly` and `dev` releases, those do not have `extended` and `eol` dates.
 
 ## Contributing
 

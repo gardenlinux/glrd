@@ -5,6 +5,7 @@ import yaml
 import boto3
 import subprocess
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import tempfile
 import os
 import sys
@@ -474,8 +475,16 @@ def create_single_release(release_type, args, existing_releases):
             logging.error("Error: Invalid --lifecycle-extended-isodatetime format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        lifecycle_extended_isodate = None
-        lifecycle_extended_timestamp = None
+        # for stable - default extended maintenance date is release date + 6 months
+        if release_type == "stable":
+            extended_date = release_date + relativedelta(months=6)
+            lifecycle_extended_isodate = extended_date.strftime('%Y-%m-%d')
+            lifecycle_extended_timestamp = int(extended_date.timestamp())
+        # patch releases will use set_latest_minor_eol_to_major() to set lifecycle fields
+        # other release types to not have extended lifecycle fields
+        else:
+            lifecycle_extended_isodate = None
+            lifecycle_extended_timestamp = None
 
     if args.lifecycle_eol_isodatetime:
         try:
@@ -486,8 +495,16 @@ def create_single_release(release_type, args, existing_releases):
             logging.error("Error: Invalid --lifecycle-eol-isodatetime format. Use ISO format: YYYY-MM-DDTHH:MM:SS")
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        lifecycle_eol_isodate = None
-        lifecycle_eol_timestamp = None
+        # for stable - default eol date is release date + 9 months
+        if release_type == "stable":
+            eol_date = release_date + relativedelta(months=9)
+            lifecycle_eol_isodate = eol_date.strftime('%Y-%m-%d')
+            lifecycle_eol_timestamp = int(eol_date.timestamp())
+        # patch releases will use set_latest_minor_eol_to_major() to set lifecycle fields
+        # other release types to not have extended lifecycle fields
+        else:
+            lifecycle_eol_isodate = None
+            lifecycle_eol_timestamp = None
 
     # Check if a manual commit is provided, otherwise use git commit at the given time
     if args.commit:
