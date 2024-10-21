@@ -64,7 +64,6 @@ def format_output(args, releases, output_format, fields=None, include_extended=F
             r.get('git', {}).get('commit_short', 'N/A'),
             r['lifecycle']['released'].get('isodate', 'N/A'),
             timestamp_to_isotime(r['lifecycle']['released'].get('timestamp')),
-            r['lifecycle']['released'].get('isodate', 'N/A'),
             get_extended_maintenance(r),
             r['lifecycle'].get('eol', {}).get('isodate', 'N/A')
         ]
