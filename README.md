@@ -71,7 +71,7 @@ You can also use the GLRD tools by building or running a container image.
 
 ```
 podman run -it --rm ghcr.io/gardenlinux/glrd glrd
-podman run -it --rm ghcr.io/gardenlinux/glrd glrd-manage
+podman run -it --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN ghcr.io/gardenlinux/glrd glrd-manage
 
 ```
 
@@ -80,8 +80,14 @@ podman run -it --rm ghcr.io/gardenlinux/glrd glrd-manage
 ```
 podman build -t glrd .
 podman run -it --rm glrd glrd
-podman run -it --rm glrd glrd-manage
+podman run -it --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN glrd glrd-manage
 ```
+
+### AWS Authentication
+
+`glrd-manage` needs write access to an AWS S3 bucket to create and manage releases. See [Boto3 Credentials documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html) and ways to configure this.
+If you are running `glrd-manage` in a container, you might want to use [Environment variables](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#environment-variables) and pass those via e.g. `podman run ... -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN`.
+
 
 </details>
 
