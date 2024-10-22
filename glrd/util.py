@@ -8,14 +8,14 @@ DEFAULTS = {
     'DEFAULT_QUERY_INPUT_FORMAT': 'json',
     'DEFAULT_QUERY_INPUT_FILE_PREFIX': 'releases',
     'DEFAULT_QUERY_INPUT_TYPE': 'url',
-    'DEFAULT_QUERY_INPUT_URL': 'https://gardenlinux-releases.s3.eu-central-1.amazonaws.com',
+    'DEFAULT_QUERY_INPUT_URL': 'https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com',
     'DEFAULT_QUERY_OUTPUT_TYPE': 'shell',
     'DEFAULT_QUERY_OUTPUT_DESCRIPTION': 'Garden Linux Releases',
     'DEFAULT_QUERY_TYPE': 'stable,patch',
     'DEFAULT_MANAGE_INPUT_FILE': 'releases-input.yaml',
     'DEFAULT_MANAGE_OUTPUT_FILE_PREFIX': 'releases',
     'DEFAULT_MANAGE_OUTPUT_FORMAT': 'json',
-    'DEFAULT_S3_BUCKET_NAME': 'gardenlinux-releases',
+    'DEFAULT_S3_BUCKET_NAME': 'gardenlinux-glrd',
     'DEFAULT_S3_BUCKET_PREFIX': '',
     'DEFAULT_S3_BUCKET_REGION': 'eu-central-1'
 }

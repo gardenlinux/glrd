@@ -1087,7 +1087,7 @@ def parse_arguments():
     parser.add_argument('--output-file-prefix', type=str, default=DEFAULTS['DEFAULT_MANAGE_OUTPUT_FILE_PREFIX'], help="The prefix added to the output file (default: releases).")
     parser.add_argument('--output-format', type=str, choices=['yaml', 'json'], default=DEFAULTS['DEFAULT_MANAGE_OUTPUT_FORMAT'], help="Output format: 'yaml' or 'json' (default: json).")
     parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
-    parser.add_argument('--s3-bucket-name', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_NAME'], help="Name of S3 bucket. Defaults to 'gardenlinux-releases'.")
+    parser.add_argument('--s3-bucket-name', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_NAME'], help="Name of S3 bucket. Defaults to 'gardenlinux-glrd'.")
     parser.add_argument('--s3-bucket-prefix', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_PREFIX'], help="Prefix inside S3 bucket. Defaults to ''.")
     parser.add_argument('--s3-bucket-region', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_REGION'], help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")
     parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")

@@ -136,7 +136,7 @@ options:
   --input-type {file,url}
                         Specify if the input type (default: url).
   --input-url INPUT_URL
-                        Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.
+                        Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.
   --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.
   --output-format {json,yaml,markdown,mermaid_gantt,shell}
                         Output format: json, yaml, markdown, mermaid_gantt, shell (default).
@@ -276,7 +276,7 @@ options:
                         Output format: 'yaml' or 'json' (default: json).
   --no-output-split     Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.
   --s3-bucket-name S3_BUCKET_NAME
-                        Name of S3 bucket. Defaults to 'gardenlinux-releases'.
+                        Name of S3 bucket. Defaults to 'gardenlinux-glrd'.
   --s3-bucket-prefix S3_BUCKET_PREFIX
                         Prefix inside S3 bucket. Defaults to ''.
   --s3-bucket-region S3_BUCKET_REGION

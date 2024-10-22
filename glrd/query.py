@@ -256,7 +256,7 @@ def parse_arguments():
     parser.add_argument('--input-format', type=str, choices=['yaml', 'json'], default=DEFAULTS['DEFAULT_QUERY_INPUT_FORMAT'], help="Input format: 'yaml' or 'json' (default: json).")
     parser.add_argument('--input-file-prefix', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_FILE_PREFIX'], help="The prefix to get input files (default: releases).")
     parser.add_argument('--input-type', choices=['file', 'url'], default=DEFAULTS['DEFAULT_QUERY_INPUT_TYPE'], help="Specify if the input type (default: url).")
-    parser.add_argument('--input-url', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_URL'], help="Input URL to the releases data. Defaults to gardenlinux-releases S3 URL.")
+    parser.add_argument('--input-url', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_URL'], help="Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.")
     parser.add_argument('--no-input-split', action='store_true', help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.")
     parser.add_argument('--output-format', choices=['json', 'yaml', 'markdown', 'mermaid_gantt', 'shell'], default=DEFAULTS['DEFAULT_QUERY_OUTPUT_TYPE'], help="Output format: json, yaml, markdown, mermaid_gantt, shell (default).")
     parser.add_argument('--output-description', type=str, default=DEFAULTS['DEFAULT_QUERY_OUTPUT_DESCRIPTION'], help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
