@@ -1,16 +1,15 @@
-
-name: publish GLRD container image
+name: release GLRD container image
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-    paths:
-      - bin/**
-      - glrd/**
-      - Containerfile
-      - requirements.txt
-      - setup.py
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+    # paths:
+    #   - bin/**
+    #   - glrd/**
+    #   - Containerfile
+    #   - requirements.txt
+    #   - setup.py
 jobs:
   build:
     name: build
@@ -24,9 +23,11 @@ jobs:
         arch: [ amd64, arm64 ]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
       - uses: ./.github/actions/setup
+      - name: set version
+        run: |
+          version=$(echo ${{ github.ref_name }} | cut -d'v' -f2)
+          echo ${version} >VERSION
       - name: podman login
         run: |
           podman login -u token -p ${{ github.token }} ghcr.io
@@ -73,4 +74,6 @@ jobs:
           podman manifest add ghcr.io/${{ github.repository }} oci-archive:/tmp/arm64-oci.tar
       - name: podman push
         run: |
-          podman manifest push ghcr.io/${{ github.repository }} docker://ghcr.io/${{ github.repository }}
+          version=${{ github.ref_name }}
+          podman manifest push ghcr.io/${{ github.repository }} docker://ghcr.io/${{ github.repository }}:latest
+          podman manifest push ghcr.io/${{ github.repository }} docker://ghcr.io/${{ github.repository }}:${version}

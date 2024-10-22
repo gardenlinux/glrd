@@ -9,12 +9,11 @@ def read_file(file):
         return f.read()
 
 long_description = read_file("README.md")
-# version = read_file("VERSION")
+version = read_file("VERSION")
 requirements = read_requirements("requirements.txt")
 
 setup(
     name="glrd",
-    # version="1.0",
     author = 'Garden Linux Maintainers',
     description = 'Garden Linux Release Database',
     long_description = long_description,
