@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - main
+    paths:
+      - bin/**
+      - glrd/**
+      - Containerfile
+      - requirements.txt
+      - setup.py
 jobs:
   build:
     name: build
@@ -46,9 +52,6 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
-      ## needed for cross-compilation via qemu
-      # - name: Set up QEMU
-      #   uses: docker/setup-qemu-action@v3
       - uses: ./.github/actions/setup
       - name: download build-amd64
         uses: actions/download-artifact@v4
