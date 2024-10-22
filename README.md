@@ -485,7 +485,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 The lifecycle fields in the release schemas help track the release dates, extended maintenance dates and end-of-life (EOL) dates for each release.
 
-### Default Stable dates
+#### Default Stable dates
 
 The defaults for `extended` and `eol` dates are based on the [Garden Linux Release Plan Overview](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md) and defined to be:
 
@@ -501,7 +501,7 @@ For example:
   - `extended`: 2024-09-13
   - `eol`: 2025-01-13
 
-### Stable and Patch releases
+#### Stable and Patch releases
 
 There is a dependency between the `lifecycle` fields of **stable** and **patch** releases:
 
@@ -532,7 +532,7 @@ In this example, the `eol` of `patch-1312.1` is set to the `released` date of `p
 
 Please note that the `extended` lifecycle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
 
-### Nightly an Dev dates
+#### Nightly an Dev dates
 
 Due to the nature of the `nightly` and `dev` releases, those do not have `extended` and `eol` dates.
 
