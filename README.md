@@ -346,13 +346,20 @@ This will generate/update a release from JSON data and upload it to the default 
 
 ### Create or update a stable release
 
+https://github.com/gardenlinux/glrd?tab=readme-ov-file#default-stable-dates
+When creating a new stable release, [Default Stable dates](#default-stable-dates) can be automatically set for you. In addition to that, you can also overwrite the dates by hand.
+
 ```
+# use default dates
+❯ glrd-manage --create stable --version 1312
+
+# overwrite default dates
 ❯ glrd-manage --create stable --version 1312 --date-time-released 2023-11-16T00:00:00 --date-time-extended 2024-05-03T00:00:00 --date-time-eol 2024-08-03T00:00:00
 ```
 
 ### Create or update a patch release
 
-When creating a new patch release, the previous patch release of the same major release gets automatically updated. See [Lifecycle Dependencies](#lifecycle-dependencies) for details.
+When creating a new patch release, the previous patch release of the same major release gets automatically updated. See [Lifecycle Dependencies](#stable-and-patch-releases) for details.
 
 ```
 # create new patch
