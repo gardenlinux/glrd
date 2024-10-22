@@ -25,11 +25,15 @@ def main():
         if release:
             format_output(args, [release], args.output_format, args.fields, no_header=args.no_header)
         else:
-            print("No active releases found.")
+            print("No latest release found.")
+            exit(1)
     else:
-        # Display all filtered releases
-
-        format_output(args, releases, args.output_format, args.fields, no_header=args.no_header)
+        if releases:
+            # Display all filtered releases
+            format_output(args, releases, args.output_format, args.fields, no_header=args.no_header)
+        else:
+            print("No releases found.")
+            exit(1)
 
 if __name__ == "__main__":
     main()
