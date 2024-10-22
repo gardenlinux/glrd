@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-    # paths:
-    #   - bin/**
-    #   - glrd/**
-    #   - Containerfile
-    #   - requirements.txt
-    #   - setup.py
 jobs:
   build:
     name: build
