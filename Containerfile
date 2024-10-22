@@ -4,6 +4,10 @@ ARG GL_BASE=ghcr.io/gardenlinux/gardenlinux:${GL_VERSION}
 
 FROM ${GL_BASE}
 
+LABEL org.opencontainers.image.source=https://github.com/gardenlinux/glrd
+LABEL org.opencontainers.image.description="Garden Linux Release Database"
+LABEL org.opencontainers.image.licenses=MIT
+
 ENV PYTHON=python3.12
 
 ENV DEBIAN_FRONTEND noninteractive
