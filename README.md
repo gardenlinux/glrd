@@ -155,12 +155,49 @@ options:
 ### Get latest Garden Linux Version
 
 ```
+# default shell output
 ❯ glrd --latest
 Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance  
 patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12 
 
 # get only version field
 ❯ glrd --latest --fields Version --no-header
+1592.1
+
+# get json output
+❯ glrd --latest --output-format json
+{
+  "releases": [
+    {
+      "name": "patch-1592.1",
+      "type": "patch",
+      "version": {
+        "major": 1592,
+        "minor": 1
+      },
+      "lifecycle": {
+        "released": {
+          "isodate": "2024-08-22",
+          "timestamp": 1724277600
+        },
+        "eol": {
+          "isodate": "2025-08-12",
+          "timestamp": 1754949600
+        }
+      },
+      "git": {
+        "commit": "ec945aa995d0f08d64303ff6045b313b40b665fb",
+        "commit_short": "ec945aa"
+      },
+      "github": {
+        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      }
+    }
+  ]
+}
+
+# get json output and filter for version
+❯ glrd --latest --output-format json | jq -r '.releases[] | "\(.version.major).\(.version.minor)"'
 1592.1
 ```
 
@@ -249,6 +286,12 @@ options:
   --s3-update           Update (merge) the generated files with S3.
   --log-level {ERROR,WARNING,INFO,DEBUG}
 ```
+
+### Testing release creation
+
+Files named `releases-${type}.json` will be created in the current working directory.
+
+Without passing `--s3-update`, no actual update will be made and changes can safely be tested and verified locally.
 
 ### Generate and populate initial release data
 
