@@ -307,7 +307,7 @@ This will generate the following initial release data ...
 ❯ glrd-manage --create-initial-releases stable,patch,nightly --input
 ```
 
-### Generate/Update an arbitrary release from JSON data
+### Generate/Update an arbitrary release from JSON/YAML data
 
 This will generate/update a release from JSON data and upload it to the default S3 bucket.
 
@@ -341,6 +341,32 @@ This will generate/update a release from JSON data and upload it to the default 
     }
   ]
 }' | glrd-manage --input-stdin
+```
+
+Another approach is writing release YAML data to an input file and use this file as input parameter.
+
+```
+❯ cat releases-input.yaml
+releases:
+  - name: patch-1592.1
+    type: patch
+    version:
+      major: 1592
+      minor: 1
+    lifecycle:
+      released:
+        isodate: "2024-08-22"
+        timestamp: 1724277600
+      eol:
+        isodate: "2025-08-27"
+        timestamp: 1754949600
+    git:
+      commit: ec945aa995d0f08d64303ff6045b313b40b66fff
+      commit_short: ec945aa
+    github:
+      release: https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1
+
+❯ glrd-manage --input --input-file releases-input.yaml
 ```
 
 ### Create or update a stable release
