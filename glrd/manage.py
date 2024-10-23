@@ -131,7 +131,7 @@ SCHEMAS = {
                 "type": "object",
                 "properties": {
                     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7}$"}
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
                 },
                 "required": ["commit", "commit_short"]
             },
@@ -167,7 +167,7 @@ SCHEMAS = {
                 "type": "object",
                 "properties": {
                     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7}$"}
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
                 },
                 "required": ["commit", "commit_short"]
             }
@@ -198,7 +198,7 @@ SCHEMAS = {
                 "type": "object",
                 "properties": {
                     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7}$"}
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
                 },
                 "required": ["commit", "commit_short"]
             }
@@ -249,7 +249,7 @@ def get_git_commit_from_tag(tag):
             sys.exit(ERROR_CODES["subprocess_output_missing"])
 
         commit = result.stdout.strip()
-        return commit, commit[:7]  # Return full commit and shortened version
+        return commit, commit[:8]  # Return full commit and shortened version
     except Exception as e:
         logging.error(f"Error fetching git commit for tag {tag}: {e}")
         sys.exit(ERROR_CODES["subprocess_output_error"])
@@ -318,7 +318,7 @@ def get_git_commit_at_time(date, time="08:00", branch="main", remote_repo="https
         logging.error(f"No commit found for {date} at {time}")
         sys.exit(ERROR_CODES["subprocess_output_missing"])
 
-    return commit, commit[:7]
+    return commit, commit[:8]
 
 def get_garden_version_for_date(release_type, date, existing_releases):
     """
@@ -512,7 +512,7 @@ def create_single_release(release_type, args, existing_releases):
         if len(commit) != 40:
             logging.error("Error: Invalid commit hash. Must be 40 characters.")
             sys.exit(ERROR_CODES["validation_error"])
-        commit_short = commit[:7]
+        commit_short = commit[:8]
     else:
         commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
 
