@@ -269,7 +269,7 @@ def ensure_isodate_and_timestamp(lifecycle):
             elif 'timestamp' in entry and entry['timestamp'] and not entry.get('isodate'):
                 entry['isodate'] = timestamp_to_isodate(entry['timestamp'])
 
-def get_git_commit_at_time(date, time="08:00", branch="main", remote_repo="https://github.com/gardenlinux/gardenlinux"):
+def get_git_commit_at_time(date, time="06:00", branch="main", remote_repo="https://github.com/gardenlinux/gardenlinux"):
     """Fetch the git commit that was at a specific date and time in the main branch, using a temporary cached git clone."""
     global repo_clone_path
 
@@ -418,17 +418,23 @@ def create_initial_nightly_releases(stable_releases):
     release_data = []
     release_type = "nightly"
 
-    start_date_default = datetime(2020, 6, 9)
+    # Set the default start date to 2020-06-09 06:00 UTC
+    start_date_default = datetime(2020, 6, 9, 6, 0, 0, tzinfo=pytz.UTC)
+    
     if stable_releases:
+        # Get the earliest stable release timestamp
         first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
-        start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp'])
+        # Convert the timestamp to a datetime object and set the time to 06:00 UTC
+        start_date = datetime.utcfromtimestamp(first_stable_release['lifecycle']['released']['timestamp']).replace(hour=7, minute=0, second=0, tzinfo=pytz.UTC)
     else:
         logging.info("No stable releases found in the generated data. Using default start date.")
+        # Use the default start date if no stable releases are available
         start_date = start_date_default
 
+    # Ensure current_date is set to 06:00 UTC as well
     tz = pytz.timezone('UTC')
-    start_date = tz.localize(start_date)
-    current_date = datetime.now(tz)
+    current_date = datetime.now(tz).replace(hour=6, minute=0, second=0, microsecond=0)
+
     date = start_date
 
     while date <= current_date:
