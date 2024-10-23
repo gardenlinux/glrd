@@ -379,7 +379,7 @@ def create_initial_releases(releases):
             "lifecycle": {
                 "released": {
                     "isodate": release['published_at'][:10],
-                    "timestamp": isodate_to_timestamp(release['published_at'][:10])
+                    "timestamp": isodate_to_timestamp(release['published_at'])
                 },
                 "eol": {
                     "isodate": None,

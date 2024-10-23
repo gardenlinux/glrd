@@ -2,6 +2,7 @@ import os
 import re
 import signal
 import sys
+import pytz
 from datetime import datetime
 
 DEFAULTS = {
@@ -50,8 +51,16 @@ def timestamp_to_isotime(timestamp):
     return dt.strftime("%H:%M:%S")
 
 def isodate_to_timestamp(isodate):
-    """Convert ISO date to timestamp."""
-    return int(datetime.strptime(isodate, "%Y-%m-%d").timestamp())
+    """
+    Convert an ISO 8601 formatted date (with or without time) to a Unix timestamp.
+    If only a date is provided, assume the time is 00:00:00 UTC.
+    """
+    try:
+        # Try parsing with full ISO format (date and time with 'Z' timezone)
+        return int(datetime.strptime(isodate, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.UTC).timestamp())
+    except ValueError:
+        # If the time part is missing, assume time is 00:00:00 UTC
+        return int(datetime.strptime(isodate, "%Y-%m-%d").replace(tzinfo=pytz.UTC).timestamp())
 
 def timestamp_to_isodate(timestamp):
     """Convert timestamp to ISO date."""
