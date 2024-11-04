@@ -110,6 +110,29 @@ podman run -it --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION
 
 </details>
 
+### Manually query JSON data
+
+<details>
+  <summary>Details</summary>
+
+You can manually query the release JSON data by getting them from our production S3 bucket.
+
+Query the release type that you want:
+
+- `releases-stable.json`
+- `releases-patch.json`
+- `releases-nightly.json`
+- `releases-dev.json`
+
+To e.g. query the stable releases:
+
+```bash
+❯ curl -s https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com/releases-stable.json
+{"releases":[{"name":"stable-27","type":"stable","version":{"major":27},"lifecycle":{"released":{"isodate":"2020-06-09","timestamp":1591694693},"extended":{"isodate":"2020-12-09","timestamp":1607472000},"eol":{"isodate":"2021-03-09","timestamp":1615248000}}},{"name":"stable-184","type":"stable","version":{"major":184},"lifecycle":{"released":{"isodate":"2020-10-29","timestamp":1603984625},"extended":{"isodate":"2020-04-29","timestamp":1588118400},"eol":{"isodate":"2021-07-29","timestamp":1627516800}}},{"name":"stable-318","type":"stable","version":{"major":318},"lifecycle":{"released":{"isodate":"2021-04-28","timestamp":1619614135},"extended":{"isodate":"2021-10-28","timestamp":1635379200},"eol":{"isodate":"2023-01-28","timestamp":1674864000}}},{"name":"stable-576","type":"stable","version":{"major":576},"lifecycle":{"released":{"isodate":"2021-11-17","timestamp":1637142852},"extended":{"isodate":"2023-05-17","timestamp":1684281600},"eol":{"isodate":"2023-08-17","timestamp":1692230400}}},{"name":"stable-934","type":"stable","version":{"major":934},"lifecycle":{"released":{"isodate":"2023-06-05","timestamp":1685968163},"extended":{"isodate":"2023-12-05","timestamp":1701734400},"eol":{"isodate":"2024-03-05","timestamp":1709596800}}},{"name":"stable-1312","type":"stable","version":{"major":1312},"lifecycle":{"released":{"isodate":"2023-11-16","timestamp":1700136050},"extended":{"isodate":"2024-05-03","timestamp":1714694400},"eol":{"isodate":"2024-08-03","timestamp":1722643200}}},{"name":"stable-1443","type":"stable","version":{"major":1443},"lifecycle":{"released":{"isodate":"2024-03-13","timestamp":1710341636},"extended":{"isodate":"2024-09-13","timestamp":1726185600},"eol":{"isodate":"2025-01-13","timestamp":1736726400}}},{"name":"stable-1592","type":"stable","version":{"major":1592},"lifecycle":{"released":{"isodate":"2024-08-12","timestamp":1723457202},"extended":{"isodate":"2025-05-12","timestamp":1747008000},"eol":{"isodate":"2025-08-12","timestamp":1754956800}}}]}
+```
+
+</details>
+
 ### AWS Authentication
 
 `glrd-manage` needs write access to an AWS S3 bucket to create and manage releases. See [Boto3 Credentials documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html) and ways to configure this.
