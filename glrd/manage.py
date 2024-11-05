@@ -855,20 +855,37 @@ def create_s3_bucket(bucket_name, region):
             }
         )
         logging.info(f"Public access block settings disabled for bucket '{bucket_name}'.")
-        public_policy = {
+        bucket_policy = {
             "Version": "2012-10-17",
             "Statement": [
+                # Allow public read access to all objects in the bucket
                 {
                     "Sid": "PublicReadGetObject",
                     "Effect": "Allow",
                     "Principal": "*",
                     "Action": "s3:GetObject",
                     "Resource": f"arn:aws:s3:::{bucket_name}/*"
+                },
+                # Deny non-SSL access
+                {
+                    "Sid": "AllowSSLRequestsOnly",
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Action": "s3:*",
+                    "Resource": [
+                        "arn:aws:s3:::gardenlinux-glrd",
+                        "arn:aws:s3:::gardenlinux-glrd/*"
+                    ],
+                    "Condition": {
+                        "Bool": {
+                            "aws:SecureTransport": "false"
+                        }
+                    }
                 }
             ]
         }
-        s3_client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(public_policy))
-        logging.info(f"Bucket '{bucket_name}' made public with a bucket policy.")
+        s3_client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(bucket_policy))
+        logging.info(f"Bucket '{bucket_name}' made public and denied non-SSL access with a bucket policy.")
     except ClientError as e:
         logging.error(f"Error creating bucket: {e}")
         sys.exit(ERROR_CODES["s3_output_error"])
