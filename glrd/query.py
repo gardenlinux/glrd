@@ -149,10 +149,17 @@ def format_mermaid_gantt(args, releases):
 
 def format_shell(rows, headers, no_header):
     """Format release data for shell output."""
+    output_lines = []
     if not no_header:
-        print("\t".join([f"{header:<20}" for header in headers]))
+        header_line = "\t".join([f"{header:<20}" for header in headers])
+        output_lines.append(header_line.strip())
     for row in rows:
-        print("\t".join([f"{str(col) if col is not None else 'foo':<20}" for col in row]))
+        row_line = "\t".join([f"{str(col) if col is not None else 'N/A':<20}" for col in row])
+        output_lines.append(row_line.strip())
+    if len(output_lines) == 1:
+        print(output_lines[0], end='')
+    else:
+        print("\n".join(output_lines))
 
 def filter_fields(headers, rows, fields):
     """Filter out the fields based on user input."""
