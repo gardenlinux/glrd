@@ -5,6 +5,7 @@ runs:
       shell: bash
       run: |
         if ! command -v podman; then
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get update
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends podman uidmap slirp4netns dbus-user-session
           id="$(id -u)"
           sudo systemctl start user@$id
