@@ -6,6 +6,7 @@ import os
 import yaml
 import tabulate
 from glrd.util import *
+import sys
 
 DEFAULTS = dict(DEFAULTS, **{
     'POSSIBLE_FIELDS_MAP': {
@@ -70,6 +71,13 @@ def find_latest_release(releases):
 def format_output(args, releases, output_format, fields=None, no_header=False):
     """Format release data for output."""
     selected_fields = fields.split(',') if fields else DEFAULTS['DEFAULT_QUERY_FIELDS'].split(',')
+    
+    invalid_fields = [field for field in selected_fields if field not in DEFAULTS['POSSIBLE_FIELDS_MAP']]
+    if invalid_fields:
+        print(f"Error: Invalid field(s): {', '.join(invalid_fields)}", file=sys.stderr)
+        print(f"Available fields: {', '.join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys())}", file=sys.stderr)
+        sys.exit(1)
+    
     rows = [
         [DEFAULTS['POSSIBLE_FIELDS_MAP'][field](r) for field in selected_fields]
         for r in releases
