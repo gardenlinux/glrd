@@ -7,6 +7,20 @@ import yaml
 import tabulate
 from glrd.util import *
 
+DEFAULTS = dict(DEFAULTS, **{
+    'POSSIBLE_FIELDS_MAP': {
+        "Name": lambda r: r.get('name', 'N/A'),
+        "Version": lambda r: get_version_string(r['version'], r.get('type')),
+        "Type": lambda r: r.get('type', 'N/A'),
+        "GitCommit": lambda r: r.get('git', {}).get('commit', 'N/A'),
+        "GitCommitShort": lambda r: r.get('git', {}).get('commit_short', 'N/A'),
+        "ReleaseDate": lambda r: r['lifecycle']['released'].get('isodate', 'N/A'),
+        "ReleaseTime": lambda r: timestamp_to_isotime(r['lifecycle']['released'].get('timestamp')),
+        "ExtendedMaintenance": lambda r: get_extended_maintenance(r),
+        "EndOfMaintenance": lambda r: r['lifecycle'].get('eol', {}).get('isodate', 'N/A')
+    }
+})
+
 def get_version_string(version, release_type=None):
     """Return a version string from a version object. Show major only for stable and next releases."""
     if release_type in ['stable', 'next']:
@@ -52,26 +66,20 @@ def find_latest_release(releases):
     """Find the latest release by version."""
     return max(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', 0)), default=None)
 
-def format_output(args, releases, output_format, fields=None, include_extended=False, no_header=False):
+def format_output(args, releases, output_format, fields=None, no_header=False):
     """Format release data for output."""
-    all_fields = ["Name", "Version", "Type", "Git Commit", "Release date", "Release time", "Extended maintenance", "End of maintenance"]
-    selected_fields = fields.split(',') if fields else all_fields
+    selected_fields = fields.split(',') if fields else DEFAULTS['DEFAULT_QUERY_FIELDS'].split(',')
     rows = [
-        [
-            r.get('name', 'N/A'),
-            get_version_string(r['version'], r.get('type')),
-            r.get('type', 'N/A'),
-            r.get('git', {}).get('commit_short', 'N/A'),
-            r['lifecycle']['released'].get('isodate', 'N/A'),
-            timestamp_to_isotime(r['lifecycle']['released'].get('timestamp')),
-            get_extended_maintenance(r),
-            r['lifecycle'].get('eol', {}).get('isodate', 'N/A')
-        ]
+        [DEFAULTS['POSSIBLE_FIELDS_MAP'][field](r) for field in selected_fields]
         for r in releases
     ]
-    headers, rows = filter_fields(all_fields, rows, selected_fields)
     
-    if output_format == 'json':
+    # Create headers based on selected fields
+    headers = [field for field in selected_fields]
+
+    if output_format == 'shell':
+        print(tabulate.tabulate(rows, headers, tablefmt="plain"))
+    elif output_format == 'json':
         print(json.dumps({"releases": releases}, indent=2))
     elif output_format == 'yaml':
         print(yaml.dump({"releases": releases}, default_flow_style=False, sort_keys=False))
@@ -276,8 +284,8 @@ def parse_arguments():
         '--fields', 
         type=str, 
         help=(
-            "Comma-separated list of fields to output. E.g., --fields "
-            "\"Name, Version, Type, Git Commit, Release date, Release time, Extended maintenance, End of maintenance\""
+            "Comma-separated list of fields to output. Possible fields: " + ", ".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
+            " (default: " + DEFAULTS['DEFAULT_QUERY_FIELDS'] + ")"
         )
     )
     parser.add_argument('--no-header', action='store_true', help="Omit the header in shell output.")
