@@ -269,8 +269,21 @@ The `glrd-manage` script is used to generate release data for Garden Linux. It c
 
 ```
 ❯ glrd-manage --help
-usage: glrd-manage [-h] [--delete DELETE] [--create-initial-releases CREATE_INITIAL_RELEASES] [--create CREATE] [--version VERSION] [--commit COMMIT] [--lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME] [--lifecycle-extended-isodatetime LIFECYCLE_EXTENDED_ISODATETIME] [--lifecycle-eol-isodatetime LIFECYCLE_EOL_ISODATETIME] [--no-query] [--input-stdin] [--input] [--input-file INPUT_FILE] [--output-file-prefix OUTPUT_FILE_PREFIX]
-                   [--output-format {yaml,json}] [--no-output-split] [--s3-bucket-name S3_BUCKET_NAME] [--s3-bucket-prefix S3_BUCKET_PREFIX] [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket] [--s3-update] [--log-level {ERROR,WARNING,INFO,DEBUG}]
+usage: glrd-manage [-h] [--delete DELETE]
+                   [--create-initial-releases CREATE_INITIAL_RELEASES]
+                   [--create CREATE] [--version VERSION] [--commit COMMIT]
+                   [--lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME]
+                   [--lifecycle-extended-isodatetime LIFECYCLE_EXTENDED_ISODATETIME]
+                   [--lifecycle-eol-isodatetime LIFECYCLE_EOL_ISODATETIME]
+                   [--no-query] [--input-stdin] [--input]
+                   [--input-file INPUT_FILE]
+                   [--output-file-prefix OUTPUT_FILE_PREFIX]
+                   [--output-format {yaml,json}] [--no-output-split]
+                   [--s3-bucket-name S3_BUCKET_NAME]
+                   [--s3-bucket-prefix S3_BUCKET_PREFIX]
+                   [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
+                   [--s3-update] [--log-level {ERROR,WARNING,INFO,DEBUG}]
+                   [--output-all] [--input-all]                   
 
 Create or delete Garden Linux releases in the GLRD.
 
@@ -307,6 +320,8 @@ options:
   --s3-create-bucket    Create an S3 bucket.
   --s3-update           Update (merge) the generated files with S3.
   --log-level {ERROR,WARNING,INFO,DEBUG}
+  --output-all          Download and write all release files found in S3 to local disk.
+  --input-all           Upload all local release files to S3.
 ```
 
 ### Testing release creation

@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError
 from jsonschema import validate, ValidationError
 from glrd.util import *
 from glrd.query import load_all_releases
+import fnmatch
 
 # silence boto3 logging
 boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
@@ -941,8 +942,94 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
         # Return the merged data as a list
         return merged_releases
 
+def download_all_s3_files(bucket_name, bucket_prefix, output_format):
+    """Download all release files from S3 and write them to disk."""
+    s3_client = boto3.client('s3')
+    
+    try:
+        # List all objects in the bucket with the given prefix
+        paginator = s3_client.get_paginator('list_objects_v2')
+        page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=bucket_prefix)
+        
+        files_downloaded = 0
+        for page in page_iterator:
+            if 'Contents' not in page:
+                continue
+                
+            for obj in page['Contents']:
+                key = obj['Key']
+                # Only download files matching the release pattern
+                if fnmatch.fnmatch(key, f"{bucket_prefix}*releases*.{output_format}"):
+                    local_file = os.path.basename(key)
+                    logging.info(f"Downloading '{key}' to '{local_file}'")
+                    try:
+                        s3_client.download_file(bucket_name, key, local_file)
+                        files_downloaded += 1
+                    except Exception as e:
+                        logging.error(f"Error downloading {key}: {e}")
+        
+        if files_downloaded == 0:
+            logging.warning(f"No release files found in s3://{bucket_name}/{bucket_prefix}")
+        else:
+            logging.info(f"Successfully downloaded {files_downloaded} release files")
+            
+    except Exception as e:
+        logging.error(f"Error accessing S3: {e}")
+        sys.exit(ERROR_CODES["s3_output_error"])
+
+def upload_all_local_files(bucket_name, bucket_prefix, input_format):
+    """Upload all local release files to S3."""
+    s3_client = boto3.client('s3')
+    
+    try:
+        # First find all matching local files
+        matching_files = []
+        for file in os.listdir('.'):
+            if fnmatch.fnmatch(file, f"*releases*.{input_format}"):
+                matching_files.append(file)
+        
+        if not matching_files:
+            logging.warning(f"No release files found to upload")
+            return
+            
+        # Show what will be uploaded and ask for confirmation
+        print("\nThe following files will be uploaded to S3:")
+        for file in matching_files:
+            bucket_key = f"{bucket_prefix}{file}"
+            print(f"  {file} -> s3://{bucket_name}/{bucket_key}")
+            
+        response = input("\nDo you really want to upload these files to S3? [y/N] ").lower()
+        if response != 'y':
+            print("Upload cancelled.")
+            return
+            
+        # Proceed with upload
+        files_uploaded = 0
+        for file in matching_files:
+            bucket_key = f"{bucket_prefix}{file}"
+            logging.info(f"Uploading '{file}' to 's3://{bucket_name}/{bucket_key}'")
+            try:
+                s3_client.upload_file(file, bucket_name, bucket_key)
+                files_uploaded += 1
+            except Exception as e:
+                logging.error(f"Error uploading {file}: {e}")
+        
+        logging.info(f"Successfully uploaded {files_uploaded} release files")
+            
+    except Exception as e:
+        logging.error(f"Error accessing S3: {e}")
+        sys.exit(ERROR_CODES["s3_output_error"])
+
 def handle_releases(args):
     """Handle the creation and deletion of initial or single releases."""
+    if args.input_all:
+        upload_all_local_files(args.s3_bucket_name, args.s3_bucket_prefix, args.output_format)
+        return
+        
+    if args.output_all:
+        download_all_s3_files(args.s3_bucket_name, args.s3_bucket_prefix, args.output_format)
+        return
+
     if not args.s3_update:
         logging.warning(f"'--s3-update' was not passed, skipping S3 update.")
 
@@ -1116,6 +1203,10 @@ def parse_arguments():
     parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
     parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
     parser.add_argument('--log-level', type=str, choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'], default='INFO', help="Set the logging level (default: INFO).")
+    parser.add_argument('--output-all', action='store_true', 
+                       help="Download and write all release files found in S3 to local disk")
+    parser.add_argument('--input-all', action='store_true',
+                       help="Upload all local release files to S3")
 
     args = parser.parse_args()
 
