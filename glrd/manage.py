@@ -140,6 +140,16 @@ SCHEMAS = {
                 "type": "object",
                 "properties": {"release": {"type": "string", "format": "uri"}},
                 "required": ["release"]
+            },
+            "attributes": {
+                "type": "object",
+                "properties": {
+                    "source_repo": {
+                        "type": "boolean",
+                        "default": True
+                    }
+                },
+                "required": ["source_repo"]
             }
         },
         "required": ["name", "type", "version", "lifecycle", "git", "github"]
@@ -171,6 +181,16 @@ SCHEMAS = {
                     "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
                 },
                 "required": ["commit", "commit_short"]
+            },
+            "attributes": {
+                "type": "object",
+                "properties": {
+                    "source_repo": {
+                        "type": "boolean",
+                        "default": True
+                    }
+                },
+                "required": ["source_repo"]
             }
         },
         "required": ["name", "type", "version", "lifecycle", "git"]
@@ -202,6 +222,16 @@ SCHEMAS = {
                     "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
                 },
                 "required": ["commit", "commit_short"]
+            },
+            "attributes": {
+                "type": "object",
+                "properties": {
+                    "source_repo": {
+                        "type": "boolean",
+                        "default": True
+                    }
+                },
+                "required": ["source_repo"]
             }
         },
         "required": ["name", "type", "version", "lifecycle", "git"]
@@ -564,6 +594,8 @@ def create_single_release(release_type, args, existing_releases):
         release['git'] = {}
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
+        release['attributes'] = {}
+        release['attributes']['source_repo'] = args.source_repo if 'source_repo' in args else True
     elif release_type == "next":
         release['name'] = f"{release_type}"
         release['lifecycle']['extended'] = {}

@@ -213,6 +213,9 @@ patch-1592.1        	1592.1              	patch               	ec945aa          
       },
       "github": {
         "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      },
+      "attributes": {
+        "source_repo": false
       }
     }
   ]
@@ -375,6 +378,9 @@ This will generate/update a release from JSON data and upload it to the default 
       },
       "github": {
         "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      },
+      "attributes": {
+        "source_repo": false
       }
     }
   ]
@@ -403,6 +409,8 @@ releases:
       commit_short: ec945aa
     github:
       release: https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1
+    attributes:
+      source_repo: false
 
 ❯ glrd-manage --input --input-file releases-input.yaml
 ```
@@ -485,6 +493,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
   - **`commit_short`**: The short git commit hash (first 7 characters).
 - **`github`**:
   - **`release`**: The URL to the GitHub release page.
+- **`attributes`**: An object that does contain additional metadata about the release.
+  - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
 ### Nightly Releases
 
@@ -504,6 +514,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+- **`attributes`**: An object that does contain additional metadata about the release.
+  - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
 ### Development Releases
 
@@ -523,6 +535,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+- **`attributes`**: An object that does contain additional metadata about the release.
+  - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
 ### Next Release
 

@@ -17,7 +17,8 @@ DEFAULTS = dict(DEFAULTS, **{
         "ReleaseDate": lambda r: r['lifecycle']['released'].get('isodate', 'N/A'),
         "ReleaseTime": lambda r: timestamp_to_isotime(r['lifecycle']['released'].get('timestamp')),
         "ExtendedMaintenance": lambda r: get_extended_maintenance(r),
-        "EndOfMaintenance": lambda r: r['lifecycle'].get('eol', {}).get('isodate', 'N/A')
+        "EndOfMaintenance": lambda r: r['lifecycle'].get('eol', {}).get('isodate', 'N/A'),
+        "AttributesSourceRepo": lambda r: str(r.get('attributes', {}).get('source_repo', 'N/A'))  # Convert boolean to string
     }
 })
 
