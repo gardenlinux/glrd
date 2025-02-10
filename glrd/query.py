@@ -76,7 +76,7 @@ def format_output(args, releases, output_format, fields=None, no_header=False):
     ]
     
     # Create headers based on selected fields
-    headers = [field for field in selected_fields]
+    headers = [field for field in selected_fields] if not no_header else ()
 
     if output_format == 'shell':
         print(tabulate.tabulate(rows, headers, tablefmt="plain"))
