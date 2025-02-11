@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime
 
 DEFAULTS = {
+    'DEFAULT_QUERY_FIELDS': 'Name,Version,Type,GitCommitShort,ReleaseDate,ReleaseTime,ExtendedMaintenance,EndOfMaintenance',
     'DEFAULT_QUERY_INPUT_FORMAT': 'json',
     'DEFAULT_QUERY_INPUT_FILE_PREFIX': 'releases',
     'DEFAULT_QUERY_INPUT_TYPE': 'url',

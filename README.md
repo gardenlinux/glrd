@@ -213,6 +213,9 @@ patch-1592.1        	1592.1              	patch               	ec945aa          
       },
       "github": {
         "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      },
+      "attributes": {
+        "source_repo": false
       }
     }
   ]
@@ -269,8 +272,21 @@ The `glrd-manage` script is used to generate release data for Garden Linux. It c
 
 ```
 ❯ glrd-manage --help
-usage: glrd-manage [-h] [--delete DELETE] [--create-initial-releases CREATE_INITIAL_RELEASES] [--create CREATE] [--version VERSION] [--commit COMMIT] [--lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME] [--lifecycle-extended-isodatetime LIFECYCLE_EXTENDED_ISODATETIME] [--lifecycle-eol-isodatetime LIFECYCLE_EOL_ISODATETIME] [--no-query] [--input-stdin] [--input] [--input-file INPUT_FILE] [--output-file-prefix OUTPUT_FILE_PREFIX]
-                   [--output-format {yaml,json}] [--no-output-split] [--s3-bucket-name S3_BUCKET_NAME] [--s3-bucket-prefix S3_BUCKET_PREFIX] [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket] [--s3-update] [--log-level {ERROR,WARNING,INFO,DEBUG}]
+usage: glrd-manage [-h] [--delete DELETE]
+                   [--create-initial-releases CREATE_INITIAL_RELEASES]
+                   [--create CREATE] [--version VERSION] [--commit COMMIT]
+                   [--lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME]
+                   [--lifecycle-extended-isodatetime LIFECYCLE_EXTENDED_ISODATETIME]
+                   [--lifecycle-eol-isodatetime LIFECYCLE_EOL_ISODATETIME]
+                   [--no-query] [--input-stdin] [--input]
+                   [--input-file INPUT_FILE]
+                   [--output-file-prefix OUTPUT_FILE_PREFIX]
+                   [--output-format {yaml,json}] [--no-output-split]
+                   [--s3-bucket-name S3_BUCKET_NAME]
+                   [--s3-bucket-prefix S3_BUCKET_PREFIX]
+                   [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
+                   [--s3-update] [--log-level {ERROR,WARNING,INFO,DEBUG}]
+                   [--output-all] [--input-all]                   
 
 Create or delete Garden Linux releases in the GLRD.
 
@@ -307,6 +323,8 @@ options:
   --s3-create-bucket    Create an S3 bucket.
   --s3-update           Update (merge) the generated files with S3.
   --log-level {ERROR,WARNING,INFO,DEBUG}
+  --output-all          Download and write all release files found in S3 to local disk.
+  --input-all           Upload all local release files to S3.
 ```
 
 ### Testing release creation
@@ -360,6 +378,9 @@ This will generate/update a release from JSON data and upload it to the default 
       },
       "github": {
         "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      },
+      "attributes": {
+        "source_repo": false
       }
     }
   ]
@@ -388,6 +409,8 @@ releases:
       commit_short: ec945aa
     github:
       release: https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1
+    attributes:
+      source_repo: false
 
 ❯ glrd-manage --input --input-file releases-input.yaml
 ```
@@ -470,6 +493,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
   - **`commit_short`**: The short git commit hash (first 7 characters).
 - **`github`**:
   - **`release`**: The URL to the GitHub release page.
+- **`attributes`**: An object that does contain additional metadata about the release.
+  - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
 ### Nightly Releases
 
@@ -489,6 +514,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+- **`attributes`**: An object that does contain additional metadata about the release.
+  - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
 ### Development Releases
 
@@ -508,6 +535,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+- **`attributes`**: An object that does contain additional metadata about the release.
+  - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
 ### Next Release
 
