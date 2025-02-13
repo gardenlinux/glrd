@@ -6,35 +6,64 @@ import pytz
 import logging
 from datetime import datetime
 
-DEFAULTS = {
-    'DEFAULT_QUERY_FIELDS': 'Name,Version,Type,GitCommitShort,ReleaseDate,ReleaseTime,ExtendedMaintenance,EndOfMaintenance',
-    'DEFAULT_QUERY_INPUT_FORMAT': 'json',
-    'DEFAULT_QUERY_INPUT_FILE_PREFIX': 'releases',
-    'DEFAULT_QUERY_INPUT_TYPE': 'url',
-    'DEFAULT_QUERY_INPUT_URL': 'https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com',
-    'DEFAULT_QUERY_OUTPUT_TYPE': 'shell',
-    'DEFAULT_QUERY_OUTPUT_DESCRIPTION': 'Garden Linux Releases',
-    'DEFAULT_QUERY_TYPE': 'stable,patch',
-    'DEFAULT_MANAGE_INPUT_FILE': 'releases-input.yaml',
-    'DEFAULT_MANAGE_OUTPUT_FILE_PREFIX': 'releases',
-    'DEFAULT_MANAGE_OUTPUT_FORMAT': 'json',
-    'DEFAULT_S3_BUCKET_NAME': 'gardenlinux-glrd',
-    'DEFAULT_S3_BUCKET_PREFIX': '',
-    'DEFAULT_S3_BUCKET_REGION': 'eu-central-1'
+ERROR_CODES = {
+    "validation_error": 1,
+    "subprocess_output_error": 2,
+    "no_releases": 3,
+    "s3_error": 4,
+    "query_error": 5,
 }
 
-# Definition of error codes
-ERROR_CODES = {
-    "generic_error": 1,
-    "parameter_missing": 2,
-    "subprocess_output_error": 100,
-    "subprocess_output_missing": 110,
-    "input_parameter_error": 101,
-    "input_parameter_missing": 111,
-    "s3_output_error": 102,
-    "s3_output_missing": 112,
-    "validation_error": 200,
-    "query_error": 201,
+DEFAULTS = {
+    # Release types
+    'RELEASE_TYPES': ['next', 'stable', 'patch', 'nightly', 'dev'],
+
+    # Query defaults
+    'QUERY_TYPE': 'stable,patch',
+    'QUERY_FIELDS': 'Name,Version,Type,ReleaseDate,ExtendedMaintenance,EndOfMaintenance,Flavors',
+    'QUERY_INPUT_TYPE': 'url',
+    'QUERY_INPUT_URL': 'https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com',
+    'QUERY_INPUT_FILE_PREFIX': 'releases',
+    'QUERY_INPUT_FORMAT': 'json',
+    'QUERY_OUTPUT_TYPE': 'shell',
+    'QUERY_OUTPUT_DESCRIPTION': 'Garden Linux Releases',
+    
+    # Manage defaults
+    'MANAGE_INPUT_FILE': 'releases-input.yaml',
+    'MANAGE_OUTPUT_FORMAT': 'yaml',
+    'MANAGE_OUTPUT_FILE_PREFIX': 'releases',
+
+    # S3 configuration for glrd storage
+    'GLRD_S3_BUCKET_NAME': 'gardenlinux-glrd',
+    'GLRD_S3_BUCKET_PREFIX': '',
+    'GLRD_S3_BUCKET_REGION': 'eu-central-1',
+    
+    # S3 configuration for releases artifacts
+    'ARTIFACTS_S3_BUCKET_NAME': 'gardenlinux-github-releases',
+    'ARTIFACTS_S3_PREFIX': 'objects/',
+    'ARTIFACTS_S3_BASE_URL': 'https://gardenlinux-github-releases.s3.amazonaws.com',
+
+    # Garden Linux repository
+    'GL_REPO_NAME': 'gardenlinux',
+    'GL_REPO_OWNER': 'gardenlinux',
+    'GL_REPO_URL': 'https://github.com/gardenlinux/gardenlinux',
+
+    # Container registry configuration
+    'CONTAINER_REGISTRY': 'ghcr.io/gardenlinux/gardenlinux',
+    
+    # Platform file extensions
+    'PLATFORM_EXTENSIONS': {
+        'ali': 'qcow2',
+        'aws': 'raw',
+        'azure': 'vhd',
+        'gcp': 'gcpimage.tar.gz',
+        'gdch': 'gcpimage.tar.gz',
+        'kvm': 'raw',
+        'metal': 'raw',
+        'openstack': 'qcow2',
+        'openstackbaremetal': 'qcow2',
+        'vmware': 'ova',
+    }
 }
 
 def extract_version_data(tag_name):

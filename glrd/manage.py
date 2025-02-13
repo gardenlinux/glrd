@@ -237,8 +237,6 @@ SCHEMAS = {
         "required": ["name", "type", "version", "lifecycle", "git"]
     }
 }
-# Availanle release types
-RELEASE_TYPES = ['next', 'stable', 'patch', 'nightly', 'dev']
 
 # Global variable to store the path of the cloned gardenlinux repository (cached)
 repo_clone_path = None
@@ -249,9 +247,12 @@ def cleanup_temp_repo():
     if repo_clone_path and os.path.exists(repo_clone_path):
         shutil.rmtree(repo_clone_path)
 
-def glrd_query_type(release_type):
+def glrd_query_type(args, release_type):
     """Retrieve releases of a specific type."""
-    releases = load_all_releases(release_type, DEFAULTS['DEFAULT_QUERY_INPUT_TYPE'], DEFAULTS['DEFAULT_QUERY_INPUT_URL'], DEFAULTS['DEFAULT_QUERY_INPUT_FILE_PREFIX'], DEFAULTS['DEFAULT_QUERY_INPUT_FORMAT'])
+    releases = load_all_releases(release_type, DEFAULTS['QUERY_INPUT_TYPE'], 
+                               DEFAULTS['QUERY_INPUT_URL'], 
+                               DEFAULTS['QUERY_INPUT_FILE_PREFIX'], 
+                               DEFAULTS['QUERY_INPUT_FORMAT'])
     if not releases:
         logging.error(f"Error retrieving releases: {result.stderr}")
         sys.exit(ERROR_CODES["query_error"])
@@ -259,7 +260,7 @@ def glrd_query_type(release_type):
 
 def get_github_releases():
     """Fetch releases from the GitHub API using the 'gh' command."""
-    command = ["gh", "api", "--paginate", "/repos/gardenlinux/gardenlinux/releases"]
+    command = ["gh", "api", "--paginate", f"/repos/{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}/releases"]
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
         logging.error(f"Error fetching GitHub releases: {result.stderr}")
@@ -272,7 +273,7 @@ def get_git_commit_from_tag(tag):
     """
     try:
         # Use the GitHub API to get the commit hash from the tag name
-        command = ["gh", "api", f"/repos/gardenlinux/gardenlinux/git/refs/tags/{tag}", "--jq", ".object.sha"]
+        command = ["gh", "api", f"/repos/{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}/git/refs/tags/{tag}", "--jq", ".object.sha"]
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
         if result.returncode != 0:
@@ -300,7 +301,7 @@ def ensure_isodate_and_timestamp(lifecycle):
             elif 'timestamp' in entry and entry['timestamp'] and not entry.get('isodate'):
                 entry['isodate'] = timestamp_to_isodate(entry['timestamp'])
 
-def get_git_commit_at_time(date, time="06:00", branch="main", remote_repo="https://github.com/gardenlinux/gardenlinux"):
+def get_git_commit_at_time(date, time="06:00", branch="main", remote_repo=DEFAULTS['GL_REPO_URL']):
     """Fetch the git commit that was at a specific date and time in the main branch, using a temporary cached git clone."""
     global repo_clone_path
 
@@ -860,8 +861,12 @@ def save_output_file(data, filename, format="yaml"):
             # Optimize JSON by removing unnecessary spaces
             json.dump(data, file, separators=(',', ':'), ensure_ascii=False)
 
-def create_s3_bucket(bucket_name, region):
-    """Create an S3 bucket in a specified region."""
+def create_s3_bucket(args, bucket_name=None, region=None):
+    """Create an S3 bucket for storing releases data."""
+    if not bucket_name:
+        bucket_name = args.s3_bucket_name
+    if not region:
+        region = args.s3_bucket_region
     try:
         s3_client = boto3.client('s3', region_name=region)
         location = {'LocationConstraint': region}
@@ -1189,7 +1194,7 @@ def store_releases(args, merged_releases):
 
 def handle_splitted_output(args, bucket_name, bucket_prefix, releases):
     """Handle output of splitted releases (next, stable, patch, nightly, dev) to disk and S3."""
-    for release_type in RELEASE_TYPES:
+    for release_type in DEFAULTS['RELEASE_TYPES']:
         releases_filtered = [r for r in releases if r['type'] == release_type]
         if releases_filtered:
             output_file = f"{args.output_file_prefix}-{release_type}.{args.output_format}"
@@ -1212,11 +1217,35 @@ def handle_output(args, bucket_name, bucket_prefix, releases):
         upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
 
 def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in the GLRD.")
+    parser = argparse.ArgumentParser(description="Manage Garden Linux releases data.")
+    
     parser.add_argument('--log-level', type=str, 
                       choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                       default='INFO', help="Set the logging level")
+    
+    parser.add_argument('--input-file', type=str, default=DEFAULTS['MANAGE_INPUT_FILE'],
+                      help="The name of the input file (default: releases-input.yaml).")
+    
+    parser.add_argument('--output-format', type=str, choices=['yaml', 'json'],
+                      default=DEFAULTS['MANAGE_OUTPUT_FORMAT'],
+                      help="Output format: yaml or json (default: yaml).")
+    
+    parser.add_argument('--output-file-prefix', type=str,
+                      default=DEFAULTS['MANAGE_OUTPUT_FILE_PREFIX'],
+                      help="The prefix for output files (default: releases).")
+    
+    parser.add_argument('--s3-bucket-name', type=str,
+                      default=DEFAULTS['GLRD_S3_BUCKET_NAME'],
+                      help="Name of S3 bucket. Defaults to 'gardenlinux-glrd'.")
+    
+    parser.add_argument('--s3-bucket-region', type=str,
+                      default=DEFAULTS['GLRD_S3_BUCKET_REGION'],
+                      help="Region for S3 bucket. Defaults to 'eu-central-1'.")
+    
+    parser.add_argument('--s3-bucket-prefix', type=str,
+                      default=DEFAULTS['GLRD_S3_BUCKET_PREFIX'],
+                      help="Prefix for S3 bucket objects. Defaults to empty string.")
+    
     parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
     parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
     parser.add_argument('--create', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
@@ -1228,16 +1257,9 @@ def parse_arguments():
     parser.add_argument('--no-query', action='store_true', help="Do not query and use existing releases using glrd command. Be careful, this can delete your releases.")
     parser.add_argument('--input-stdin', action='store_true', help="Process a single input from stdin (JSON data).")
     parser.add_argument('--input', action='store_true', help="Process input from --input-file.")
-    parser.add_argument('--input-file', type=str, default=DEFAULTS['DEFAULT_MANAGE_INPUT_FILE'], help="The name of the input file (default: releases-input.yaml).")
-    parser.add_argument('--output-file-prefix', type=str, default=DEFAULTS['DEFAULT_MANAGE_OUTPUT_FILE_PREFIX'], help="The prefix added to the output file (default: releases).")
-    parser.add_argument('--output-format', type=str, choices=['yaml', 'json'], default=DEFAULTS['DEFAULT_MANAGE_OUTPUT_FORMAT'], help="Output format: 'yaml' or 'json' (default: json).")
     parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
-    parser.add_argument('--s3-bucket-name', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_NAME'], help="Name of S3 bucket. Defaults to 'gardenlinux-glrd'.")
-    parser.add_argument('--s3-bucket-prefix', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_PREFIX'], help="Prefix inside S3 bucket. Defaults to ''.")
-    parser.add_argument('--s3-bucket-region', type=str, default=DEFAULTS['DEFAULT_S3_BUCKET_REGION'], help="Name of S3 bucket Region. Defaults to 'eu-central-1'.")
     parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
     parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
-    parser.add_argument('--log-level', type=str, choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'], default='INFO', help="Set the logging level (default: INFO).")
     parser.add_argument('--output-all', action='store_true', 
                        help="Download and write all release files found in S3 to local disk")
     parser.add_argument('--input-all', action='store_true',

@@ -278,26 +278,56 @@ def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Process and filter releases data from a file or URL.")
     
-    parser.add_argument('--input-format', type=str, choices=['yaml', 'json'], default=DEFAULTS['DEFAULT_QUERY_INPUT_FORMAT'], help="Input format: 'yaml' or 'json' (default: json).")
-    parser.add_argument('--input-file-prefix', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_FILE_PREFIX'], help="The prefix to get input files (default: releases).")
-    parser.add_argument('--input-type', choices=['file', 'url'], default=DEFAULTS['DEFAULT_QUERY_INPUT_TYPE'], help="Specify if the input type (default: url).")
-    parser.add_argument('--input-url', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_URL'], help="Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.")
-    parser.add_argument('--no-input-split', action='store_true', help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.")
-    parser.add_argument('--output-format', choices=['json', 'yaml', 'markdown', 'mermaid_gantt', 'shell'], default=DEFAULTS['DEFAULT_QUERY_OUTPUT_TYPE'], help="Output format: json, yaml, markdown, mermaid_gantt, shell (default).")
-    parser.add_argument('--output-description', type=str, default=DEFAULTS['DEFAULT_QUERY_OUTPUT_DESCRIPTION'], help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
-    parser.add_argument('--active', action='store_true', help="Show only active releases.")
-    parser.add_argument('--archived', action='store_true', help="Show only archived releases.")
-    parser.add_argument('--latest', action='store_true', help="Show the latest active major.minor release.")
-    parser.add_argument('--type', type=str, default=DEFAULTS['DEFAULT_QUERY_TYPE'], help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
-    parser.add_argument('--version', type=str, help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
-    parser.add_argument(
-        '--fields', 
-        type=str, 
-        help=(
-            "Comma-separated list of fields to output. Possible fields: " + ", ".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
-            " (default: " + DEFAULTS['DEFAULT_QUERY_FIELDS'] + ")"
-        )
-    )
-    parser.add_argument('--no-header', action='store_true', help="Omit the header in shell output.")
+    parser.add_argument('--input-format', type=str, choices=['yaml', 'json'], 
+                       default=DEFAULTS['QUERY_INPUT_FORMAT'], 
+                       help="Input format: 'yaml' or 'json' (default: json).")
+    
+    parser.add_argument('--input-file-prefix', type=str, 
+                       default=DEFAULTS['QUERY_INPUT_FILE_PREFIX'], 
+                       help="The prefix to get input files (default: releases).")
+    
+    parser.add_argument('--input-type', choices=['file', 'url'], 
+                       default=DEFAULTS['QUERY_INPUT_TYPE'], 
+                       help="Specify if the input type (default: url).")
+    
+    parser.add_argument('--input-url', type=str, 
+                       default=DEFAULTS['QUERY_INPUT_URL'], 
+                       help="Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.")
+    
+    parser.add_argument('--no-input-split', action='store_true', 
+                       help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.")
+    
+    parser.add_argument('--output-format', 
+                       choices=['json', 'yaml', 'markdown', 'mermaid_gantt', 'shell'], 
+                       default=DEFAULTS['QUERY_OUTPUT_TYPE'], 
+                       help="Output format: json, yaml, markdown, mermaid_gantt, shell (default).")
+    
+    parser.add_argument('--output-description', type=str, 
+                       default=DEFAULTS['QUERY_OUTPUT_DESCRIPTION'], 
+                       help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
+    
+    parser.add_argument('--active', action='store_true', 
+                       help="Show only active releases.")
+    
+    parser.add_argument('--archived', action='store_true', 
+                       help="Show only archived releases.")
+    
+    parser.add_argument('--latest', action='store_true', 
+                       help="Show the latest active major.minor release.")
+    
+    parser.add_argument('--type', type=str, 
+                       default=DEFAULTS['QUERY_TYPE'], 
+                       help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
+    
+    parser.add_argument('--version', type=str, 
+                       help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
+    
+    parser.add_argument('--fields', type=str, 
+                       help=("Comma-separated list of fields to output. Possible fields: " + 
+                            ", ".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
+                            " (default: " + DEFAULTS['QUERY_FIELDS'] + ")"))
+    
+    parser.add_argument('--no-header', action='store_true', 
+                       help="Omit the header in shell output.")
     
     return parser.parse_args()
