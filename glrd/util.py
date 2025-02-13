@@ -3,6 +3,7 @@ import re
 import signal
 import sys
 import pytz
+import logging
 from datetime import datetime
 
 DEFAULTS = {

@@ -7,6 +7,7 @@ import yaml
 import tabulate
 from glrd.util import *
 import sys
+import logging
 
 DEFAULTS = dict(DEFAULTS, **{
     'POSSIBLE_FIELDS_MAP': {

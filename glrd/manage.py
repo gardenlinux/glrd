@@ -1214,6 +1214,9 @@ def handle_output(args, bucket_name, bucket_prefix, releases):
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Create or delete Garden Linux releases in the GLRD.")
+    parser.add_argument('--log-level', type=str, 
+                      choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                      default='INFO', help="Set the logging level")
     parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
     parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
     parser.add_argument('--create', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
@@ -1241,6 +1244,9 @@ def parse_arguments():
                        help="Upload all local release files to S3")
 
     args = parser.parse_args()
+
+    # Convert log level to uppercase if provided in lowercase
+    args.log_level = args.log_level.upper()
 
     if len(sys.argv) == 1:
         parser.print_help()
