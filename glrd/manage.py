@@ -596,7 +596,7 @@ def create_single_release(release_type, args, existing_releases):
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
         release['attributes'] = {}
-        release['attributes']['source_repo'] = args.source_repo if 'source_repo' in args else True
+        release['attributes']['source_repo'] = True 
     elif release_type == "next":
         release['name'] = f"{release_type}"
         release['lifecycle']['extended'] = {}
@@ -624,6 +624,8 @@ def create_single_release(release_type, args, existing_releases):
         release['git']['commit_short'] = commit_short
         release['github'] = {}
         release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
+        release['attributes'] = {}
+        release['attributes']['source_repo'] = True 
 
     logging.debug(f"Release '{release['name']}' created.")
     return release
