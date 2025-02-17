@@ -18,10 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - name: set version
-        run: |
-          version=$(echo ${{ github.ref_name }} | cut -d'v' -f2)
-          echo ${version} >VERSION
       - name: podman login
         run: |
           podman login -u token -p ${{ github.token }} ghcr.io

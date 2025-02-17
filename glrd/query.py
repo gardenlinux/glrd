@@ -331,3 +331,51 @@ def parse_arguments():
                        help="Omit the header in shell output.")
     
     return parser.parse_args()
+
+def process_query(args):
+    """Process the query based on command line arguments."""
+    # Load releases
+    releases = load_all_releases(
+        args.type,
+        args.input_type,
+        args.input_url,
+        args.input_file_prefix,
+        args.input_format,
+        args.no_input_split
+    )
+
+    if not releases:
+        logging.error("No releases found.")
+        sys.exit(ERROR_CODES["no_releases"])
+
+    # Filter by version if specified
+    if args.version:
+        releases = filter_releases(releases, version=args.version)
+
+    # Filter by type if specified
+    if args.type:
+        releases = filter_releases(releases, release_types=args.type)
+
+    # Filter active/archived releases
+    if args.active:
+        releases = filter_active_releases(releases)
+    elif args.archived:
+        releases = filter_archived_releases(releases)
+
+    # Get latest release if requested
+    if args.latest:
+        latest = find_latest_release(releases)
+        releases = [latest] if latest else []
+
+    # Sort releases
+    releases = sort_releases(releases)
+
+    # Format and output the results
+    format_output(args, releases, args.output_format, args.fields, args.no_header)
+
+def main():
+    args = parse_arguments()
+    process_query(args)
+
+if __name__ == "__main__":
+    main()

@@ -3,6 +3,7 @@
 .envrc
 .venv
 _build
+dist/
 shell.nix
 releases.json
 releases.yaml

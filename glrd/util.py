@@ -12,6 +12,7 @@ ERROR_CODES = {
     "no_releases": 3,
     "s3_error": 4,
     "query_error": 5,
+    "parameter_missing": 6,
 }
 
 DEFAULTS = {

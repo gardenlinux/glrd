@@ -1275,3 +1275,10 @@ def parse_arguments():
         sys.exit(ERROR_CODES["parameter_missing"])
 
     return args
+
+def main():
+    args = parse_arguments()
+    handle_releases(args)
+
+if __name__ == "__main__":
+    main()

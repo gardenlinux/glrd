@@ -8,8 +8,8 @@ on:
       - bin/**
       - glrd/**
       - Containerfile
-      - requirements.txt
-      - setup.py
+      - poetry.lock
+      - pyproject.toml
 jobs:
   build:
     name: build
