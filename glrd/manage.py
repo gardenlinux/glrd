@@ -1,23 +1,30 @@
 import argparse
+import atexit
+import base64
+import fnmatch
 import json
-import pytz
-import yaml
-import boto3
+import logging
+import os
+import re
+import shutil
 import subprocess
+import sys
+import tempfile
+import time
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-import tempfile
-import os
-import sys
-import atexit
-import shutil
-import logging
-from deepdiff import DeepDiff
+
+import boto3
+import pytz
+import yaml
 from botocore.exceptions import ClientError
+from deepdiff import DeepDiff
 from jsonschema import validate, ValidationError
-from glrd.util import *
+
 from glrd.query import load_all_releases
-import fnmatch
+from glrd.util import *
+from python_gardenlinux_lib.flavors.parse_flavors import *
+from python_gardenlinux_lib.s3.s3 import *
 
 # silence boto3 logging
 boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
@@ -141,6 +148,10 @@ SCHEMAS = {
                 "properties": {"release": {"type": "string", "format": "uri"}},
                 "required": ["release"]
             },
+            "flavors": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
             "attributes": {
                 "type": "object",
                 "properties": {
@@ -182,6 +193,10 @@ SCHEMAS = {
                 },
                 "required": ["commit", "commit_short"]
             },
+            "flavors": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
             "attributes": {
                 "type": "object",
                 "properties": {
@@ -222,6 +237,10 @@ SCHEMAS = {
                     "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
                 },
                 "required": ["commit", "commit_short"]
+            },
+            "flavors": {
+                "type": "array",
+                "items": {"type": "string"}
             },
             "attributes": {
                 "type": "object",
@@ -489,7 +508,11 @@ def create_initial_nightly_releases(stable_releases):
     return release_data
 
 def create_single_release(release_type, args, existing_releases):
-    """Generate a release using the release_type, current timestamp and git info, or using provided arguments."""
+    """Create a single release of the specified type."""
+    if release_type not in DEFAULTS['RELEASE_TYPES']:
+        logging.error(f"Invalid release type: {release_type}")
+        sys.exit(ERROR_CODES["parameter_missing"])
+
     # Check if a manual lifecycle-released-isodatetime is provided, otherwise use the current date
     if args.lifecycle_released_isodatetime:
         try:
@@ -579,6 +602,36 @@ def create_single_release(release_type, args, existing_releases):
     else:
         major, minor = get_garden_version_for_date(release_type, release_date, existing_releases)
 
+    # Create version object
+    version = {'major': major, 'minor': minor}
+
+    # First try to get flavors from flavors.yaml
+    flavors = parse_flavors_commit(commit, version=version, query_s3=False, logger=logging.getLogger())
+
+    # Only if no flavors found in flavors.yaml, try S3
+    if not flavors:
+        logging.info("No flavors found in flavors.yaml, checking S3 artifacts...")
+        # Get artifacts data from S3 with caching
+        artifacts_data = get_s3_artifacts(
+            DEFAULTS['ARTIFACTS_S3_BUCKET_NAME'],
+            DEFAULTS['ARTIFACTS_S3_PREFIX'],
+            logger=logging.getLogger()
+        )
+
+        if artifacts_data:
+            flavors = parse_flavors_commit(
+                commit, 
+                version=version, 
+                query_s3=True, 
+                s3_objects=artifacts_data,
+                logger=logging.getLogger()
+            )
+        else:
+            logging.warning("No artifacts data available from S3")
+
+    if not flavors:
+        logging.info(f"No flavors found anywhere for version {version} (commit {commit_short})")
+
     # Create release data
     release = {}
     release['type'] = f"{release_type}"
@@ -595,6 +648,7 @@ def create_single_release(release_type, args, existing_releases):
         release['git'] = {}
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
+        release['flavors'] = flavors
         release['attributes'] = {}
         release['attributes']['source_repo'] = True 
     elif release_type == "next":
@@ -624,6 +678,7 @@ def create_single_release(release_type, args, existing_releases):
         release['git']['commit_short'] = commit_short
         release['github'] = {}
         release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
+        release['flavors'] = flavors
         release['attributes'] = {}
         release['attributes']['source_repo'] = True 
 
@@ -839,7 +894,6 @@ def diff_releases(existing_merged_releases, merged_releases):
 
         if diff:
             logging.info(f"{release_name} - release will be updated.")
-            release_name = new_release['name']
             for change_type, changes in diff.items():
                 if change_type == 'values_changed':
                     for path, change in changes.items():
@@ -849,16 +903,21 @@ def diff_releases(existing_merged_releases, merged_releases):
                     for path, change in changes.items():
                         formatted_path = path.replace("root", "")
                         logging.info(f"{release_name} - {change_type}: {formatted_path} type changed from '{change['old_type']}' to '{change['new_type']}'")
-                else:
-                    for path, change in changes.items():
-                        formatted_path = path.replace("root", "")
-                        logging.info(f"{release_name} - {change_type}: {formatted_path}")
+                elif change_type in ['dictionary_item_added', 'dictionary_item_removed', 'iterable_item_added', 'iterable_item_removed']:
+                    changes_list = sorted(list(changes))
+                    for change in changes_list:
+                        formatted_change = change.replace("root", "")
 
 def save_output_file(data, filename, format="yaml"):
     """Save the data to a file in the specified format."""
     with open(filename, 'w') as file:
         if format == 'yaml':
-            yaml.dump(data, file, default_flow_style=False, sort_keys=False)
+            # Create a custom dumper class that doesn't generate anchors
+            class NoAliasDumper(yaml.SafeDumper):
+                def ignore_aliases(self, data):
+                    return True
+            
+            yaml.dump(data, file, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper)
         else:
             # Optimize JSON by removing unnecessary spaces
             json.dump(data, file, separators=(',', ':'), ensure_ascii=False)
@@ -1097,11 +1156,10 @@ def handle_releases(args):
 
     if not args.no_query:
         # Execute glrd command to fill stable, patch, nightly, and dev releases
-        existing_next_releases = glrd_query_type("next")
-        existing_stable_releases = glrd_query_type("stable")
-        existing_patch_releases = glrd_query_type("patch")
-        existing_nightly_releases = glrd_query_type("nightly")
-        existing_dev_releases = glrd_query_type("dev")
+        existing_next_releases = glrd_query_type(args, "next")
+        existing_stable_releases = glrd_query_type(args, "stable")
+        existing_patch_releases = glrd_query_type(args, "patch")
+        existing_nightly_releases = glrd_query_type(args, "nightly")
         existing_merged_releases = existing_next_releases + existing_stable_releases + existing_patch_releases + existing_nightly_releases + existing_dev_releases
         next_releases.extend(existing_next_releases)
         stable_releases.extend(existing_stable_releases)
@@ -1119,7 +1177,6 @@ def handle_releases(args):
         if create_initial_stable or create_initial_patch:
             github_releases = get_github_releases()
             stable_releases, patch_releases, latest_minor_versions = create_initial_releases(github_releases)
-
 
         # Add stdin input or file input data if provided (existing releases will be overwritten)
         if args.input_stdin or args.input:
@@ -1280,6 +1337,13 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
+
+    # Configure logging with the already uppercase level
+    logging.basicConfig(
+        level=args.log_level,
+        format='%(levelname)s: %(message)s'
+    )
+
     handle_releases(args)
 
 if __name__ == "__main__":

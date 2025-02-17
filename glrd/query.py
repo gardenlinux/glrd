@@ -20,7 +20,9 @@ DEFAULTS = dict(DEFAULTS, **{
         "ReleaseTime": lambda r: timestamp_to_isotime(r['lifecycle']['released'].get('timestamp')),
         "ExtendedMaintenance": lambda r: get_extended_maintenance(r),
         "EndOfMaintenance": lambda r: r['lifecycle'].get('eol', {}).get('isodate', 'N/A'),
-        "AttributesSourceRepo": lambda r: str(r.get('attributes', {}).get('source_repo', 'N/A'))  # Convert boolean to string
+        "Flavors": lambda r: ','.join(r.get('flavors', [])) or 'N/A',  # Simple comma-separated list for shell output
+        "OCI": lambda r: get_oci_url(r),
+        "AttributesSourceRepo": lambda r: str(r.get('attributes', {}).get('source_repo', 'N/A'))
     }
 })
 
@@ -71,7 +73,42 @@ def find_latest_release(releases):
 
 def format_output(args, releases, output_format, fields=None, no_header=False):
     """Format release data for output."""
-    selected_fields = fields.split(',') if fields else DEFAULTS['DEFAULT_QUERY_FIELDS'].split(',')
+    if output_format in ['json', 'yaml']:
+        # For JSON/YAML, convert flavors to map with URLs before output
+        releases_with_urls = []
+        for release in releases:
+            # Create a new dictionary with ordered keys
+            release_copy = {}
+            
+            # Add core fields first
+            core_fields = ['name', 'type', 'version', 'lifecycle', 'git', 'github']
+            for field in core_fields:
+                if field in release:
+                    release_copy[field] = release[field]
+            
+            # Always add flavors field, empty dict if no flavors
+            flavors_map = format_flavors_with_urls(release)
+            release_copy['flavors'] = flavors_map
+            
+            # Add OCI URL
+            oci_url = get_oci_url(release)
+            if oci_url != 'N/A':
+                release_copy['oci'] = oci_url
+            
+            # Add attributes last
+            if 'attributes' in release:
+                release_copy['attributes'] = release['attributes']
+            
+            releases_with_urls.append(release_copy)
+        
+        if output_format == 'json':
+            print(json.dumps({"releases": releases_with_urls}, indent=2))
+        else:  # yaml
+            print(yaml.dump({"releases": releases_with_urls}, default_flow_style=False, sort_keys=False))
+        return
+
+    # For other formats, use the original POSSIBLE_FIELDS_MAP formatting
+    selected_fields = fields.split(',') if fields else DEFAULTS['QUERY_FIELDS'].split(',')
     
     invalid_fields = [field for field in selected_fields if field not in DEFAULTS['POSSIBLE_FIELDS_MAP']]
     if invalid_fields:
@@ -84,21 +121,14 @@ def format_output(args, releases, output_format, fields=None, no_header=False):
         for r in releases
     ]
     
-    # Create headers based on selected fields
     headers = [field for field in selected_fields] if not no_header else ()
 
     if output_format == 'shell':
         print(tabulate.tabulate(rows, headers, tablefmt="plain"))
-    elif output_format == 'json':
-        print(json.dumps({"releases": releases}, indent=2))
-    elif output_format == 'yaml':
-        print(yaml.dump({"releases": releases}, default_flow_style=False, sort_keys=False))
     elif output_format == 'markdown':
         print(tabulate.tabulate(rows, headers, tablefmt="pipe"))
     elif output_format == 'mermaid_gantt':
         format_mermaid_gantt(args, releases)
-    elif output_format == 'shell':
-        format_shell(rows, headers, no_header)
 
 def get_extended_maintenance(release):
     """Return the extended maintenance date for a release, if available."""
@@ -332,6 +362,72 @@ def parse_arguments():
     
     return parser.parse_args()
 
+def format_flavors_with_urls(release):
+    """Format flavors as a map with metadata and image URLs."""
+    # Return empty dict if no flavors in release
+    if not release.get('flavors'):
+        return {}
+    
+    try:
+        version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
+        commit_short = release['git'].get('commit_short', '')
+        
+        # Create separate dictionaries for regular and OCI flavors
+        regular_flavors = {}
+        oci_flavors = {}
+        
+        for flavor in sorted(release['flavors']):  # Sort flavors for consistent ordering
+            # Get platform from flavor (first part before dash)
+            platform = flavor.split('-')[0]
+
+            # Handle container platform differently
+            if platform == "container":
+                # Remove the architecture part (last component after dash)
+                flavor_base = '-'.join(flavor.split('-')[:-1])
+                oci_flavors[flavor] = {
+                    'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
+                }
+                continue
+            
+            # Handle bare platform differently
+            if platform == "bare":
+                # Remove the architecture part (last component after dash)
+                flavor_base = '-'.join(flavor.split('-')[:-1])
+                oci_flavors[flavor] = {
+                    'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}/{flavor_base}:{version}"
+                }
+                continue
+            
+            # For all other platforms, use metadata and image URLs
+            # Get file extension for this platform
+            image_ext = DEFAULTS['PLATFORM_EXTENSIONS'].get(platform, "raw")
+            
+            base_url = f"{DEFAULTS['ARTIFACTS_S3_BASE_URL']}/{DEFAULTS['ARTIFACTS_S3_PREFIX']}{flavor}-{version}-{commit_short}"
+            base_filename = f"{flavor}-{version}-{commit_short}"
+            
+            regular_flavors[flavor] = {
+                'metadata': f"{base_url}/{base_filename}.manifest",
+                'image': f"{base_url}/{base_filename}.{image_ext}"
+            }
+        
+        # Combine regular and OCI flavors, with OCI flavors at the end
+        return {**regular_flavors, **oci_flavors}
+        
+    except Exception as e:
+        logging.error(f"Error formatting flavors with URLs: {e}")
+        return {}
+
+def get_oci_url(release):
+    """Return the OCI image URL for a release."""
+    try:
+        if release['type'] in ['stable', 'next']:
+            version = str(release['version']['major'])
+        else:
+            version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
+        return f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
+    except Exception:
+        return 'N/A'
+
 def process_query(args):
     """Process the query based on command line arguments."""
     # Load releases
@@ -375,6 +471,7 @@ def process_query(args):
 
 def main():
     args = parse_arguments()
+
     process_query(args)
 
 if __name__ == "__main__":

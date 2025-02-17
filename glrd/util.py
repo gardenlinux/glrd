@@ -1,10 +1,13 @@
+import json
+import logging
 import os
 import re
 import signal
 import sys
-import pytz
-import logging
 from datetime import datetime
+
+import pytz
+import yaml
 
 ERROR_CODES = {
     "validation_error": 1,
@@ -74,13 +77,18 @@ def extract_version_data(tag_name):
     return (int(match.group(1)), int(match.group(2))) if match else (None, None)
 
 def get_current_timestamp():
-    """Return the current timestamp."""
-    return int(datetime.now().timestamp())
+    """Get current timestamp in UTC."""
+    return int(datetime.now(pytz.UTC).timestamp())
 
 def timestamp_to_isotime(timestamp):
-    """Convert timestamp to ISO time."""
-    dt = datetime.utcfromtimestamp(float(timestamp))
-    return dt.strftime("%H:%M:%S")
+    """Convert timestamp to ISO time string."""
+    if not timestamp:
+        return 'N/A'
+    try:
+        dt = datetime.fromtimestamp(timestamp, pytz.UTC)
+        return dt.strftime('%H:%M:%S')
+    except (ValueError, TypeError):
+        return 'N/A'
 
 def isodate_to_timestamp(isodate):
     """
@@ -99,11 +107,6 @@ def timestamp_to_isodate(timestamp):
     dt = datetime.utcfromtimestamp(timestamp)
     return dt.strftime("%Y-%m-%d")
 
-def timestamp_to_isotime(timestamp):
-    """Convert timestamp to ISO time."""
-    dt = datetime.utcfromtimestamp(timestamp)
-    return dt.strftime("%H:%M:%S")
-
 # Handle SIGPIPE and BrokenPipeError
 def handle_broken_pipe_error(signum, frame):
     try:
@@ -112,3 +115,37 @@ def handle_broken_pipe_error(signum, frame):
         os._exit(0)
 
 signal.signal(signal.SIGPIPE, handle_broken_pipe_error)
+
+def setup_logger(log_level, name='glrd'):
+    """
+    Configure and return a logger with the specified log level.
+    
+    Args:
+        log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        name (str): Logger name (default: 'glrd')
+        
+    Returns:
+        logging.Logger: Configured logger instance
+    """
+    # Get or create logger
+    logger = logging.getLogger(name)
+    
+    # Remove any existing handlers to prevent duplicates
+    logger.handlers = []
+    
+    # Prevent propagation to parent loggers
+    logger.propagate = False
+    
+    # Set level
+    logger.setLevel(log_level)
+    
+    # Create console handler with formatting
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    formatter = logging.Formatter('%(message)s')  # Simplified format without prefix
+    console_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(console_handler)
+    
+    return logger
