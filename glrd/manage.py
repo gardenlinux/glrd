@@ -1040,42 +1040,37 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
         # Return the merged data as a list
         return merged_releases
 
-def download_all_s3_files(bucket_name, bucket_prefix, output_format):
-    """Download all release files from S3 and write them to disk."""
-    s3_client = boto3.client('s3')
+def download_all_s3_files(bucket_name, bucket_prefix):
+    """Download all release files from S3 bucket."""
+    s3_client = get_s3_client()
     
     try:
         # List all objects in the bucket with the given prefix
         paginator = s3_client.get_paginator('list_objects_v2')
-        page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=bucket_prefix)
+        found_files = False
         
-        files_downloaded = 0
-        for page in page_iterator:
-            if 'Contents' not in page:
-                continue
-                
-            for obj in page['Contents']:
-                key = obj['Key']
-                # Only download files matching the release pattern
-                if fnmatch.fnmatch(key, f"{bucket_prefix}*releases*.{output_format}"):
-                    local_file = os.path.basename(key)
-                    logging.info(f"Downloading '{key}' to '{local_file}'")
-                    try:
-                        s3_client.download_file(bucket_name, key, local_file)
-                        files_downloaded += 1
-                    except Exception as e:
-                        logging.error(f"Error downloading {key}: {e}")
+        logging.info(f"Looking for files in s3://{bucket_name}/{bucket_prefix}")
         
-        if files_downloaded == 0:
+        for page in paginator.paginate(Bucket=bucket_name, Prefix=bucket_prefix):
+            if 'Contents' in page:
+                found_files = True
+                for obj in page['Contents']:
+                    key = obj['Key']
+                    if key.endswith('.json'):
+                        local_file = os.path.basename(key)
+                        download_from_s3(bucket_name, key, local_file)
+        
+        if not found_files:
             logging.warning(f"No release files found in s3://{bucket_name}/{bucket_prefix}")
-        else:
-            logging.info(f"Successfully downloaded {files_downloaded} release files")
+            # Create empty files for each release type
+            for release_type in DEFAULTS['RELEASE_TYPES']:
+                filename = f"releases-{release_type}.json"
+                save_output_file({'releases': []}, filename, 'json')
             
     except Exception as e:
-        logging.error(f"Error accessing S3: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
+        logging.error(f"Error downloading files from S3: {e}")
 
-def upload_all_local_files(bucket_name, bucket_prefix, input_format):
+def upload_all_local_files(bucket_name, bucket_prefix):
     """Upload all local release files to S3."""
     s3_client = boto3.client('s3')
     
@@ -1083,7 +1078,7 @@ def upload_all_local_files(bucket_name, bucket_prefix, input_format):
         # First find all matching local files
         matching_files = []
         for file in os.listdir('.'):
-            if fnmatch.fnmatch(file, f"*releases*.{input_format}"):
+            if fnmatch.fnmatch(file, f"*releases*.{output_format}"):
                 matching_files.append(file)
         
         if not matching_files:
@@ -1105,7 +1100,6 @@ def upload_all_local_files(bucket_name, bucket_prefix, input_format):
         files_uploaded = 0
         for file in matching_files:
             bucket_key = f"{bucket_prefix}{file}"
-            logging.info(f"Uploading '{file}' to 's3://{bucket_name}/{bucket_key}'")
             try:
                 s3_client.upload_file(file, bucket_name, bucket_key)
                 files_uploaded += 1
@@ -1121,11 +1115,11 @@ def upload_all_local_files(bucket_name, bucket_prefix, input_format):
 def handle_releases(args):
     """Handle the creation and deletion of initial or single releases."""
     if args.input_all:
-        upload_all_local_files(args.s3_bucket_name, args.s3_bucket_prefix, args.output_format)
+        upload_all_local_files(args.s3_bucket_name, args.s3_bucket_prefix)
         return
         
     if args.output_all:
-        download_all_s3_files(args.s3_bucket_name, args.s3_bucket_prefix, args.output_format)
+        download_all_s3_files(args.s3_bucket_name, args.s3_bucket_prefix)
         return
 
     if not args.s3_update:
