@@ -38,12 +38,12 @@ The GLRD provides a structured way to store and access release data for Garden L
 
 ### Prerequisites
 
-- **Python 3.6+**
+- **Python 3.10+**
 
 You can install the required Python packages using:
 
 ```bash
-pip install -r requirements.txt
+poetry install
 ```
 
 - **AWS CLI** configured with appropriate permissions if you plan to use S3 integration.
@@ -56,7 +56,7 @@ Clone the repository and ensure that the scripts are executable:
 ```bash
 git clone https://github.com/gardenlinux/glrd.git
 cd glrd
-pip install -e .
+poetry install
 ```
 </details>
 
