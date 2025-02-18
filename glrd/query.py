@@ -75,65 +75,6 @@ def find_latest_release(releases):
     """Find the latest release by version."""
     return max(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', 0)), default=None)
 
-def format_output(args, releases, output_format, fields=None, no_header=False):
-    """Format release data for output."""
-    if output_format in ['json', 'yaml']:
-        # For JSON/YAML, convert flavors to map with URLs before output
-        releases_with_urls = []
-        for release in releases:
-            # Create a new dictionary with ordered keys
-            release_copy = {}
-            
-            # Add core fields first
-            core_fields = ['name', 'type', 'version', 'lifecycle', 'git', 'github']
-            for field in core_fields:
-                if field in release:
-                    release_copy[field] = release[field]
-            
-            # Always add flavors field, empty dict if no flavors
-            flavors_map = format_flavors_with_urls(release)
-            release_copy['flavors'] = flavors_map
-            
-            # Add OCI URL
-            oci_url = get_oci_url(release)
-            if oci_url != 'N/A':
-                release_copy['oci'] = oci_url
-            
-            # Add attributes last
-            if 'attributes' in release:
-                release_copy['attributes'] = release['attributes']
-            
-            releases_with_urls.append(release_copy)
-        
-        if output_format == 'json':
-            print(json.dumps({"releases": releases_with_urls}, indent=2))
-        else:  # yaml
-            print(yaml.dump({"releases": releases_with_urls}, default_flow_style=False, sort_keys=False))
-        return
-
-    # For other formats, use the original POSSIBLE_FIELDS_MAP formatting
-    selected_fields = fields.split(',') if fields else DEFAULTS['QUERY_FIELDS'].split(',')
-    
-    invalid_fields = [field for field in selected_fields if field not in DEFAULTS['POSSIBLE_FIELDS_MAP']]
-    if invalid_fields:
-        print(f"Error: Invalid field(s): {', '.join(invalid_fields)}", file=sys.stderr)
-        print(f"Available fields: {', '.join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys())}", file=sys.stderr)
-        sys.exit(1)
-    
-    rows = [
-        [DEFAULTS['POSSIBLE_FIELDS_MAP'][field](r) for field in selected_fields]
-        for r in releases
-    ]
-    
-    headers = [field for field in selected_fields] if not no_header else ()
-
-    if output_format == 'shell':
-        print(tabulate.tabulate(rows, headers, tablefmt="plain"))
-    elif output_format == 'markdown':
-        print(tabulate.tabulate(rows, headers, tablefmt="pipe"))
-    elif output_format == 'mermaid_gantt':
-        format_mermaid_gantt(args, releases)
-
 def get_extended_maintenance(release):
     """Return the extended maintenance date for a release, if available."""
     extended = release['lifecycle'].get('extended', {})
@@ -148,16 +89,91 @@ def duration_in_months(start_date, end_date):
     months = delta.days / 30.44  # Approximate average days in a month
     return round(months)
 
+def prepare_structured_output(release):
+    """Prepare a release object for JSON/YAML output by adding URLs and organizing fields."""
+    release_copy = {}
+    
+    # Add core fields first in specific order
+    core_fields = ['name', 'type', 'version', 'lifecycle', 'git', 'github']
+    for field in core_fields:
+        if field in release:
+            release_copy[field] = release[field]
+    
+    # Add flavors with URLs
+    release_copy['flavors'] = format_flavors_with_urls(release)
+    
+    # Add OCI URL
+    release_copy['oci'] = get_oci_url(release)
+    
+    # Add attributes last
+    if 'attributes' in release:
+        release_copy['attributes'] = release['attributes']
+    
+    return release_copy
+
+def format_structured_output(releases, output_format):
+    """Format releases as JSON or YAML."""
+    releases_with_urls = [prepare_structured_output(r) for r in releases]
+    data = {"releases": releases_with_urls}
+    
+    if output_format == 'json':
+        return json.dumps(data, indent=2)
+    else:  # yaml
+        return yaml.dump(data, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper)
+
+def format_tabular_output(releases, fields, no_header, output_format):
+    """Format releases as a table for shell or markdown output."""
+    # Get the requested fields or use defaults
+    selected_fields = fields.split(',') if fields else DEFAULTS['QUERY_FIELDS'].split(',')
+    
+    # Get all available fields for validation
+    all_fields = list(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys())
+    
+    # Validate and filter the fields
+    selected_fields, _ = filter_fields(all_fields, [], selected_fields)
+    
+    # Generate rows using only the selected fields
+    rows = [
+        [DEFAULTS['POSSIBLE_FIELDS_MAP'][field](r) for field in selected_fields]
+        for r in releases
+    ]
+    
+    headers = selected_fields if not no_header else ()
+    
+    if output_format == 'shell':
+        return tabulate.tabulate(rows, headers, tablefmt="plain")
+    elif output_format == 'markdown':
+        return tabulate.tabulate(rows, headers, tablefmt="pipe")
+
+def filter_fields(headers, rows, requested_fields):
+    """Filter columns in tabular data based on requested fields."""
+    # Validate requested fields
+    invalid_fields = [f for f in requested_fields if f not in headers]
+    if invalid_fields:
+        logging.error(f"Invalid field(s): {', '.join(invalid_fields)}")
+        logging.error(f"Available fields: {', '.join(headers)}")
+        sys.exit(ERROR_CODES['invalid_field'])
+    
+    # Get indices of requested fields
+    indices = [headers.index(field) for field in requested_fields]
+    
+    # Filter headers and rows
+    filtered_headers = [headers[i] for i in indices]
+    filtered_rows = [[row[i] for i in indices] for row in rows]
+    
+    return filtered_headers, filtered_rows
+
 def format_mermaid_gantt(args, releases):
-    """Format release data into Mermaid Gantt chart syntax."""
-    print("gantt")
-    print(f"    title {args.output_description}")
-    print("    axisFormat %m.%y")
+    """Format releases as a Mermaid Gantt chart."""
+    output = []
+    output.append("gantt")
+    output.append(f"    title {args.output_description}")
+    output.append("    axisFormat %m.%y")
     
     for release in releases:
         name = get_version_string(release['version'], release.get('type'))
         # name = release['name']
-        print(f"    section {name}")
+        output.append(f"    section {name}")
         
         # Extract dates
         released_date_str = release['lifecycle']['released'].get('isodate')
@@ -173,52 +189,47 @@ def format_mermaid_gantt(args, releases):
         # Add 'Release' milestone
         if released_date:
             released_date_formatted = released_date.strftime('%Y-%m-%d')
-            print(f"        Release:                milestone, {released_date_formatted}, 0m")
+            output.append(f"        Release:                milestone, {released_date_formatted}, 0m")
         
         # Standard maintenance
         if released_date and extended_date:
             duration_months = duration_in_months(released_date, extended_date)
             duration_str = f"{duration_months}M"
             start_date_str = released_date.strftime('%Y-%m-%d')
-            print(f"        Standard maintenance:       task, {start_date_str}, {duration_str}")
+            output.append(f"        Standard maintenance:       task, {start_date_str}, {duration_str}")
         
         # Extended maintenance
         if extended_date and eol_date:
             # Extended maintenance start as a milestone
             extended_date_formatted = extended_date.strftime('%Y-%m-%d')
-            print(f"        Extended maintenance:       milestone, {extended_date_formatted}, 0m")
+            output.append(f"        Extended maintenance:       milestone, {extended_date_formatted}, 0m")
             duration_months = duration_in_months(extended_date, eol_date)
             duration_str = f"{duration_months}M"
             start_date_str = extended_date.strftime('%Y-%m-%d')
-            print(f"        Extended maintenance:       task, {start_date_str}, {duration_str}")
+            output.append(f"        Extended maintenance:       task, {start_date_str}, {duration_str}")
             # End of maintenance milestone
             eol_date_formatted = eol_date.strftime('%Y-%m-%d')
-            print(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
+            output.append(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
         elif eol_date:
             # No extended maintenance, but have eol_date
             eol_date_formatted = eol_date.strftime('%Y-%m-%d')
-            print(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
+            output.append(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
+    
+    return "\n".join(output)
 
-def format_shell(rows, headers, no_header):
-    """Format release data for shell output."""
-    output_lines = []
-    if not no_header:
-        header_line = "\t".join([f"{header:<20}" for header in headers])
-        output_lines.append(header_line.strip())
-    for row in rows:
-        row_line = "\t".join([f"{str(col) if col is not None else 'N/A':<20}" for col in row])
-        output_lines.append(row_line.strip())
-    if len(output_lines) == 1:
-        print(output_lines[0], end='')
-    else:
-        print("\n".join(output_lines))
-
-def filter_fields(headers, rows, fields):
-    """Filter out the fields based on user input."""
-    selected_indexes = [headers.index(field) for field in fields if field in headers]
-    filtered_headers = [headers[i] for i in selected_indexes]
-    filtered_rows = [[row[i] for i in selected_indexes] for row in rows]
-    return filtered_headers, filtered_rows
+def format_output(args, releases, output_format, fields=None, no_header=False):
+    """Format and print release data in the specified format."""
+    formatted_output = None
+    
+    if output_format in ['json', 'yaml']:
+        formatted_output = format_structured_output(releases, output_format)
+    elif output_format in ['shell', 'markdown']:
+        formatted_output = format_tabular_output(releases, fields, no_header, output_format)
+    elif output_format == 'mermaid_gantt':
+        formatted_output = format_mermaid_gantt(args, releases)
+    
+    if formatted_output is not None:
+        print(formatted_output)
 
 def sort_releases(releases):
     """Sort releases by major and minor version, handling non-integer majors like 'next'."""
@@ -358,7 +369,7 @@ def parse_arguments():
     
     parser.add_argument('--fields', type=str, 
                        help=("Comma-separated list of fields to output. Possible fields: " + 
-                            ", ".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
+                            ",".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
                             " (default: " + DEFAULTS['QUERY_FIELDS'] + ")"))
     
     parser.add_argument('--no-header', action='store_true', 
@@ -366,9 +377,50 @@ def parse_arguments():
     
     return parser.parse_args()
 
+def get_platform_from_flavor(flavor):
+    """Extract platform from flavor string."""
+    try:
+        return flavor.split('-')[0]
+    except Exception as e:
+        logging.error(f"Error extracting platform from flavor {flavor}: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def prepare_oci_flavor_url(flavor, version, platform):
+    """Create OCI URL for container/bare platforms."""
+    try:
+        if platform == "container":
+            return {
+                'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
+            }
+        elif platform == "bare":
+            flavor_base = '-'.join(flavor.split('-')[:-1])
+            return {
+                'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}/{flavor_base}:{version}"
+            }
+    except Exception as e:
+        logging.error(f"Error creating URLs for container/bare platforms: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def prepare_regular_flavor_urls(flavor, version, commit_short, platform):
+    """Create metadata and image URLs for regular platforms."""
+    try:
+        image_ext = DEFAULTS['PLATFORM_EXTENSIONS'].get(platform, "raw")
+        base_url = (f"{DEFAULTS['ARTIFACTS_S3_BASE_URL']}/"
+                   f"{DEFAULTS['ARTIFACTS_S3_PREFIX']}"
+                   f"{flavor}-{version}-{commit_short}")
+        base_filename = f"{flavor}-{version}-{commit_short}"
+        
+        return {
+            'metadata': f"{base_url}/{base_filename}.manifest",
+            'image': f"{base_url}/{base_filename}.{image_ext}"
+        }
+    except Exception as e:
+        logging.error(f"Error creating URLs for flavor {flavor}: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
 def format_flavors_with_urls(release):
     """Format flavors as a map with metadata and image URLs."""
-    # Return empty dict if no flavors in release
+    """Return empty dict if no flavors in release."""
     if not release.get('flavors'):
         return {}
     
@@ -376,43 +428,23 @@ def format_flavors_with_urls(release):
         version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
         commit_short = release['git'].get('commit_short', '')
         
-        # Create separate dictionaries for regular and OCI flavors
         regular_flavors = {}
         oci_flavors = {}
         
-        for flavor in sorted(release['flavors']):  # Sort flavors for consistent ordering
-            # Get platform from flavor (first part before dash)
-            platform = flavor.split('-')[0]
-
-            # Handle container platform differently
-            if platform == "container":
-                # Remove the architecture part (last component after dash)
-                flavor_base = '-'.join(flavor.split('-')[:-1])
-                oci_flavors[flavor] = {
-                    'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
-                }
+        for flavor in sorted(release['flavors']):
+            platform = get_platform_from_flavor(flavor)
+            
+            # Handle OCI-based platforms
+            if platform in ["container", "bare"]:
+                urls = prepare_oci_flavor_url(flavor, version, platform)
+                if urls:
+                    oci_flavors[flavor] = urls
                 continue
             
-            # Handle bare platform differently
-            if platform == "bare":
-                # Remove the architecture part (last component after dash)
-                flavor_base = '-'.join(flavor.split('-')[:-1])
-                oci_flavors[flavor] = {
-                    'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}/{flavor_base}:{version}"
-                }
-                continue
-            
-            # For all other platforms, use metadata and image URLs
-            # Get file extension for this platform
-            image_ext = DEFAULTS['PLATFORM_EXTENSIONS'].get(platform, "raw")
-            
-            base_url = f"{DEFAULTS['ARTIFACTS_S3_BASE_URL']}/{DEFAULTS['ARTIFACTS_S3_PREFIX']}{flavor}-{version}-{commit_short}"
-            base_filename = f"{flavor}-{version}-{commit_short}"
-            
-            regular_flavors[flavor] = {
-                'metadata': f"{base_url}/{base_filename}.manifest",
-                'image': f"{base_url}/{base_filename}.{image_ext}"
-            }
+            # Handle regular platforms
+            urls = prepare_regular_flavor_urls(flavor, version, commit_short, platform)
+            if urls:
+                regular_flavors[flavor] = urls
         
         # Combine regular and OCI flavors, with OCI flavors at the end
         return {**regular_flavors, **oci_flavors}

@@ -28,7 +28,7 @@ DEFAULTS = {
 
     # Query defaults
     'QUERY_TYPE': 'stable,patch',
-    'QUERY_FIELDS': 'Name,Version,Type,ReleaseDate,ExtendedMaintenance,EndOfMaintenance,Flavors',
+    'QUERY_FIELDS': 'Name,Version,Type,GitCommitShort,ReleaseDate,ExtendedMaintenance,EndOfMaintenance',
     'QUERY_INPUT_TYPE': 'url',
     'QUERY_INPUT_URL': 'https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com',
     'QUERY_INPUT_FILE_PREFIX': 'releases',
