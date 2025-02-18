@@ -1,12 +1,17 @@
 import argparse
 import json
-import requests
-from datetime import datetime
+import logging
 import os
-import yaml
-import tabulate
-from glrd.util import *
 import sys
+from datetime import datetime
+
+import requests
+import tabulate
+import yaml
+
+from glrd.util import *
+from python_gardenlinux_lib.flavors.parse_flavors import *
+from python_gardenlinux_lib.s3.s3 import *
 
 DEFAULTS = dict(DEFAULTS, **{
     'POSSIBLE_FIELDS_MAP': {
@@ -19,7 +24,9 @@ DEFAULTS = dict(DEFAULTS, **{
         "ReleaseTime": lambda r: timestamp_to_isotime(r['lifecycle']['released'].get('timestamp')),
         "ExtendedMaintenance": lambda r: get_extended_maintenance(r),
         "EndOfMaintenance": lambda r: r['lifecycle'].get('eol', {}).get('isodate', 'N/A'),
-        "AttributesSourceRepo": lambda r: str(r.get('attributes', {}).get('source_repo', 'N/A'))  # Convert boolean to string
+        "Flavors": lambda r: ','.join(r.get('flavors', [])) or 'N/A',  # Simple comma-separated list for shell output
+        "OCI": lambda r: get_oci_url(r),
+        "AttributesSourceRepo": lambda r: str(r.get('attributes', {}).get('source_repo', 'N/A'))
     }
 })
 
@@ -68,37 +75,6 @@ def find_latest_release(releases):
     """Find the latest release by version."""
     return max(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', 0)), default=None)
 
-def format_output(args, releases, output_format, fields=None, no_header=False):
-    """Format release data for output."""
-    selected_fields = fields.split(',') if fields else DEFAULTS['DEFAULT_QUERY_FIELDS'].split(',')
-    
-    invalid_fields = [field for field in selected_fields if field not in DEFAULTS['POSSIBLE_FIELDS_MAP']]
-    if invalid_fields:
-        print(f"Error: Invalid field(s): {', '.join(invalid_fields)}", file=sys.stderr)
-        print(f"Available fields: {', '.join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys())}", file=sys.stderr)
-        sys.exit(1)
-    
-    rows = [
-        [DEFAULTS['POSSIBLE_FIELDS_MAP'][field](r) for field in selected_fields]
-        for r in releases
-    ]
-    
-    # Create headers based on selected fields
-    headers = [field for field in selected_fields] if not no_header else ()
-
-    if output_format == 'shell':
-        print(tabulate.tabulate(rows, headers, tablefmt="plain"))
-    elif output_format == 'json':
-        print(json.dumps({"releases": releases}, indent=2))
-    elif output_format == 'yaml':
-        print(yaml.dump({"releases": releases}, default_flow_style=False, sort_keys=False))
-    elif output_format == 'markdown':
-        print(tabulate.tabulate(rows, headers, tablefmt="pipe"))
-    elif output_format == 'mermaid_gantt':
-        format_mermaid_gantt(args, releases)
-    elif output_format == 'shell':
-        format_shell(rows, headers, no_header)
-
 def get_extended_maintenance(release):
     """Return the extended maintenance date for a release, if available."""
     extended = release['lifecycle'].get('extended', {})
@@ -113,16 +89,91 @@ def duration_in_months(start_date, end_date):
     months = delta.days / 30.44  # Approximate average days in a month
     return round(months)
 
+def prepare_structured_output(release):
+    """Prepare a release object for JSON/YAML output by adding URLs and organizing fields."""
+    release_copy = {}
+    
+    # Add core fields first in specific order
+    core_fields = ['name', 'type', 'version', 'lifecycle', 'git', 'github']
+    for field in core_fields:
+        if field in release:
+            release_copy[field] = release[field]
+    
+    # Add flavors with URLs
+    release_copy['flavors'] = format_flavors_with_urls(release)
+    
+    # Add OCI URL
+    release_copy['oci'] = get_oci_url(release)
+    
+    # Add attributes last
+    if 'attributes' in release:
+        release_copy['attributes'] = release['attributes']
+    
+    return release_copy
+
+def format_structured_output(releases, output_format):
+    """Format releases as JSON or YAML."""
+    releases_with_urls = [prepare_structured_output(r) for r in releases]
+    data = {"releases": releases_with_urls}
+    
+    if output_format == 'json':
+        return json.dumps(data, indent=2)
+    else:  # yaml
+        return yaml.dump(data, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper)
+
+def format_tabular_output(releases, fields, no_header, output_format):
+    """Format releases as a table for shell or markdown output."""
+    # Get the requested fields or use defaults
+    selected_fields = fields.split(',') if fields else DEFAULTS['QUERY_FIELDS'].split(',')
+    
+    # Get all available fields for validation
+    all_fields = list(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys())
+    
+    # Validate and filter the fields
+    selected_fields, _ = filter_fields(all_fields, [], selected_fields)
+    
+    # Generate rows using only the selected fields
+    rows = [
+        [DEFAULTS['POSSIBLE_FIELDS_MAP'][field](r) for field in selected_fields]
+        for r in releases
+    ]
+    
+    headers = selected_fields if not no_header else ()
+    
+    if output_format == 'shell':
+        return tabulate.tabulate(rows, headers, tablefmt="plain")
+    elif output_format == 'markdown':
+        return tabulate.tabulate(rows, headers, tablefmt="pipe")
+
+def filter_fields(headers, rows, requested_fields):
+    """Filter columns in tabular data based on requested fields."""
+    # Validate requested fields
+    invalid_fields = [f for f in requested_fields if f not in headers]
+    if invalid_fields:
+        logging.error(f"Invalid field(s): {', '.join(invalid_fields)}")
+        logging.error(f"Available fields: {', '.join(headers)}")
+        sys.exit(ERROR_CODES['invalid_field'])
+    
+    # Get indices of requested fields
+    indices = [headers.index(field) for field in requested_fields]
+    
+    # Filter headers and rows
+    filtered_headers = [headers[i] for i in indices]
+    filtered_rows = [[row[i] for i in indices] for row in rows]
+    
+    return filtered_headers, filtered_rows
+
 def format_mermaid_gantt(args, releases):
-    """Format release data into Mermaid Gantt chart syntax."""
-    print("gantt")
-    print(f"    title {args.output_description}")
-    print("    axisFormat %m.%y")
+    """Format releases as a Mermaid Gantt chart."""
+    output = []
+    output.append("gantt")
+    output.append(f"    title {args.output_description}")
+    output.append("    axisFormat %m.%y")
     
     for release in releases:
         name = get_version_string(release['version'], release.get('type'))
         # name = release['name']
-        print(f"    section {name}")
+        output.append(f"    section {name}")
         
         # Extract dates
         released_date_str = release['lifecycle']['released'].get('isodate')
@@ -138,52 +189,47 @@ def format_mermaid_gantt(args, releases):
         # Add 'Release' milestone
         if released_date:
             released_date_formatted = released_date.strftime('%Y-%m-%d')
-            print(f"        Release:                milestone, {released_date_formatted}, 0m")
+            output.append(f"        Release:                milestone, {released_date_formatted}, 0m")
         
         # Standard maintenance
         if released_date and extended_date:
             duration_months = duration_in_months(released_date, extended_date)
             duration_str = f"{duration_months}M"
             start_date_str = released_date.strftime('%Y-%m-%d')
-            print(f"        Standard maintenance:       task, {start_date_str}, {duration_str}")
+            output.append(f"        Standard maintenance:       task, {start_date_str}, {duration_str}")
         
         # Extended maintenance
         if extended_date and eol_date:
             # Extended maintenance start as a milestone
             extended_date_formatted = extended_date.strftime('%Y-%m-%d')
-            print(f"        Extended maintenance:       milestone, {extended_date_formatted}, 0m")
+            output.append(f"        Extended maintenance:       milestone, {extended_date_formatted}, 0m")
             duration_months = duration_in_months(extended_date, eol_date)
             duration_str = f"{duration_months}M"
             start_date_str = extended_date.strftime('%Y-%m-%d')
-            print(f"        Extended maintenance:       task, {start_date_str}, {duration_str}")
+            output.append(f"        Extended maintenance:       task, {start_date_str}, {duration_str}")
             # End of maintenance milestone
             eol_date_formatted = eol_date.strftime('%Y-%m-%d')
-            print(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
+            output.append(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
         elif eol_date:
             # No extended maintenance, but have eol_date
             eol_date_formatted = eol_date.strftime('%Y-%m-%d')
-            print(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
+            output.append(f"        End of maintenance:         milestone, {eol_date_formatted}, 0m")
+    
+    return "\n".join(output)
 
-def format_shell(rows, headers, no_header):
-    """Format release data for shell output."""
-    output_lines = []
-    if not no_header:
-        header_line = "\t".join([f"{header:<20}" for header in headers])
-        output_lines.append(header_line.strip())
-    for row in rows:
-        row_line = "\t".join([f"{str(col) if col is not None else 'N/A':<20}" for col in row])
-        output_lines.append(row_line.strip())
-    if len(output_lines) == 1:
-        print(output_lines[0], end='')
-    else:
-        print("\n".join(output_lines))
-
-def filter_fields(headers, rows, fields):
-    """Filter out the fields based on user input."""
-    selected_indexes = [headers.index(field) for field in fields if field in headers]
-    filtered_headers = [headers[i] for i in selected_indexes]
-    filtered_rows = [[row[i] for i in selected_indexes] for row in rows]
-    return filtered_headers, filtered_rows
+def format_output(args, releases, output_format, fields=None, no_header=False):
+    """Format and print release data in the specified format."""
+    formatted_output = None
+    
+    if output_format in ['json', 'yaml']:
+        formatted_output = format_structured_output(releases, output_format)
+    elif output_format in ['shell', 'markdown']:
+        formatted_output = format_tabular_output(releases, fields, no_header, output_format)
+    elif output_format == 'mermaid_gantt':
+        formatted_output = format_mermaid_gantt(args, releases)
+    
+    if formatted_output is not None:
+        print(formatted_output)
 
 def sort_releases(releases):
     """Sort releases by major and minor version, handling non-integer majors like 'next'."""
@@ -215,12 +261,12 @@ def load_releases(input_source, is_url=False):
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            print(f"Error fetching data from URL: {e}")
-            exit(1)
+            logging.error(f"Error fetching data from URL: {e}")
+            sys.exit(ERROR_CODES['http_error'])
     else:
         if not os.path.exists(input_source):
-            print(f"Error: File {input_source} does not exist.")
-            exit(1)
+            logging.error(f"Error: File {input_source} does not exist.")
+            sys.exit(ERROR_CODES['file_not_found'])
         with open(input_source, 'r') as file:
             return json.load(file)
 
@@ -277,26 +323,193 @@ def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Process and filter releases data from a file or URL.")
     
-    parser.add_argument('--input-format', type=str, choices=['yaml', 'json'], default=DEFAULTS['DEFAULT_QUERY_INPUT_FORMAT'], help="Input format: 'yaml' or 'json' (default: json).")
-    parser.add_argument('--input-file-prefix', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_FILE_PREFIX'], help="The prefix to get input files (default: releases).")
-    parser.add_argument('--input-type', choices=['file', 'url'], default=DEFAULTS['DEFAULT_QUERY_INPUT_TYPE'], help="Specify if the input type (default: url).")
-    parser.add_argument('--input-url', type=str, default=DEFAULTS['DEFAULT_QUERY_INPUT_URL'], help="Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.")
-    parser.add_argument('--no-input-split', action='store_true', help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.")
-    parser.add_argument('--output-format', choices=['json', 'yaml', 'markdown', 'mermaid_gantt', 'shell'], default=DEFAULTS['DEFAULT_QUERY_OUTPUT_TYPE'], help="Output format: json, yaml, markdown, mermaid_gantt, shell (default).")
-    parser.add_argument('--output-description', type=str, default=DEFAULTS['DEFAULT_QUERY_OUTPUT_DESCRIPTION'], help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
-    parser.add_argument('--active', action='store_true', help="Show only active releases.")
-    parser.add_argument('--archived', action='store_true', help="Show only archived releases.")
-    parser.add_argument('--latest', action='store_true', help="Show the latest active major.minor release.")
-    parser.add_argument('--type', type=str, default=DEFAULTS['DEFAULT_QUERY_TYPE'], help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
-    parser.add_argument('--version', type=str, help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
-    parser.add_argument(
-        '--fields', 
-        type=str, 
-        help=(
-            "Comma-separated list of fields to output. Possible fields: " + ", ".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
-            " (default: " + DEFAULTS['DEFAULT_QUERY_FIELDS'] + ")"
-        )
-    )
-    parser.add_argument('--no-header', action='store_true', help="Omit the header in shell output.")
+    parser.add_argument('--input-format', type=str, choices=['yaml', 'json'], 
+                       default=DEFAULTS['QUERY_INPUT_FORMAT'], 
+                       help="Input format: 'yaml' or 'json' (default: json).")
+    
+    parser.add_argument('--input-file-prefix', type=str, 
+                       default=DEFAULTS['QUERY_INPUT_FILE_PREFIX'], 
+                       help="The prefix to get input files (default: releases).")
+    
+    parser.add_argument('--input-type', choices=['file', 'url'], 
+                       default=DEFAULTS['QUERY_INPUT_TYPE'], 
+                       help="Specify if the input type (default: url).")
+    
+    parser.add_argument('--input-url', type=str, 
+                       default=DEFAULTS['QUERY_INPUT_URL'], 
+                       help="Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.")
+    
+    parser.add_argument('--no-input-split', action='store_true', 
+                       help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.")
+    
+    parser.add_argument('--output-format', 
+                       choices=['json', 'yaml', 'markdown', 'mermaid_gantt', 'shell'], 
+                       default=DEFAULTS['QUERY_OUTPUT_TYPE'], 
+                       help="Output format: json, yaml, markdown, mermaid_gantt, shell (default).")
+    
+    parser.add_argument('--output-description', type=str, 
+                       default=DEFAULTS['QUERY_OUTPUT_DESCRIPTION'], 
+                       help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').")
+    
+    parser.add_argument('--active', action='store_true', 
+                       help="Show only active releases.")
+    
+    parser.add_argument('--archived', action='store_true', 
+                       help="Show only archived releases.")
+    
+    parser.add_argument('--latest', action='store_true', 
+                       help="Show the latest active major.minor release.")
+    
+    parser.add_argument('--type', type=str, 
+                       default=DEFAULTS['QUERY_TYPE'], 
+                       help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
+    
+    parser.add_argument('--version', type=str, 
+                       help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
+    
+    parser.add_argument('--fields', type=str, 
+                       help=("Comma-separated list of fields to output. Possible fields: " + 
+                            ",".join(DEFAULTS['POSSIBLE_FIELDS_MAP'].keys()) +
+                            " (default: " + DEFAULTS['QUERY_FIELDS'] + ")"))
+    
+    parser.add_argument('--no-header', action='store_true', 
+                       help="Omit the header in shell output.")
     
     return parser.parse_args()
+
+def get_platform_from_flavor(flavor):
+    """Extract platform from flavor string."""
+    try:
+        return flavor.split('-')[0]
+    except Exception as e:
+        logging.error(f"Error extracting platform from flavor {flavor}: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def prepare_oci_flavor_url(flavor, version, platform):
+    """Create OCI URL for container/bare platforms."""
+    try:
+        if platform == "container":
+            return {
+                'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
+            }
+        elif platform == "bare":
+            flavor_base = '-'.join(flavor.split('-')[:-1])
+            return {
+                'oci': f"{DEFAULTS['CONTAINER_REGISTRY']}/{flavor_base}:{version}"
+            }
+    except Exception as e:
+        logging.error(f"Error creating URLs for container/bare platforms: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def prepare_regular_flavor_urls(flavor, version, commit_short, platform):
+    """Create metadata and image URLs for regular platforms."""
+    try:
+        image_ext = DEFAULTS['PLATFORM_EXTENSIONS'].get(platform, "raw")
+        base_url = (f"{DEFAULTS['ARTIFACTS_S3_BASE_URL']}/"
+                   f"{DEFAULTS['ARTIFACTS_S3_PREFIX']}"
+                   f"{flavor}-{version}-{commit_short}")
+        base_filename = f"{flavor}-{version}-{commit_short}"
+        
+        return {
+            'metadata': f"{base_url}/{base_filename}.manifest",
+            'image': f"{base_url}/{base_filename}.{image_ext}"
+        }
+    except Exception as e:
+        logging.error(f"Error creating URLs for flavor {flavor}: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def format_flavors_with_urls(release):
+    """Format flavors as a map with metadata and image URLs."""
+    """Return empty dict if no flavors in release."""
+    if not release.get('flavors'):
+        return {}
+    
+    try:
+        version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
+        commit_short = release['git'].get('commit_short', '')
+        
+        regular_flavors = {}
+        oci_flavors = {}
+        
+        for flavor in sorted(release['flavors']):
+            platform = get_platform_from_flavor(flavor)
+            
+            # Handle OCI-based platforms
+            if platform in ["container", "bare"]:
+                urls = prepare_oci_flavor_url(flavor, version, platform)
+                if urls:
+                    oci_flavors[flavor] = urls
+                continue
+            
+            # Handle regular platforms
+            urls = prepare_regular_flavor_urls(flavor, version, commit_short, platform)
+            if urls:
+                regular_flavors[flavor] = urls
+        
+        # Combine regular and OCI flavors, with OCI flavors at the end
+        return {**regular_flavors, **oci_flavors}
+        
+    except Exception as e:
+        logging.error(f"Error formatting flavors with URLs: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def get_oci_url(release):
+    """Return the OCI image URL for a release."""
+    try:
+        if release['type'] in ['stable', 'next']:
+            version = str(release['version']['major'])
+        else:
+            version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
+        return f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
+    except Exception as e:
+        logging.error(f"Error getting OCI URL: {e}")
+        sys.exit(ERROR_CODES['format_error'])
+
+def process_query(args):
+    """Process the query based on command line arguments."""
+    # Load releases
+    releases = load_all_releases(
+        args.type,
+        args.input_type,
+        args.input_url,
+        args.input_file_prefix,
+        args.input_format,
+        args.no_input_split
+    )
+
+    if not releases:
+        logging.error("No releases found.")
+        sys.exit(ERROR_CODES["no_releases"])
+
+    # Filter by version if specified
+    if args.version:
+        releases = filter_releases(releases, version=args.version)
+
+    # Filter by type if specified
+    if args.type:
+        releases = filter_releases(releases, release_types=args.type)
+
+    # Filter active/archived releases
+    if args.active:
+        releases = filter_active_releases(releases)
+    elif args.archived:
+        releases = filter_archived_releases(releases)
+
+    # Get latest release if requested
+    if args.latest:
+        latest = find_latest_release(releases)
+        releases = [latest] if latest else []
+
+    # Sort releases
+    releases = sort_releases(releases)
+
+    # Format and output the results
+    format_output(args, releases, args.output_format, args.fields, args.no_header)
+
+def main():
+    args = parse_arguments()
+
+    process_query(args)
+
+if __name__ == "__main__":
+    main()

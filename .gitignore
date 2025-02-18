@@ -1,8 +1,11 @@
 *.egg-info
 **/__pycache__
+.artifacts_cache.json
+.artifacts_index.json
 .envrc
 .venv
 _build
+dist/
 shell.nix
 releases.json
 releases.yaml

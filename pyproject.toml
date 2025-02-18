@@ -1,0 +1,35 @@
+[project]
+dynamic = ["version"]
+
+[tool.poetry]
+name = "glrd"
+version = "0.0.0"
+description = "Garden Linux Release Database"
+authors = ["Garden Linux Team"]
+readme = "README.md"
+packages = [{include = "glrd"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+poetry-dynamic-versioning = "*"
+boto3 = "*"
+deepdiff = "*"
+jsonschema = "*"
+PyYAML = "*"
+pytz = "*"
+python-dateutil = "*"
+requests = "*"
+tabulate = "*"
+python-gardenlinux-lib = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", branch = "main" }
+
+[tool.poetry-dynamic-versioning]
+enable = true
+
+[tool.poetry.scripts]
+glrd-update = "glrd.update:main"
+glrd-manage = "glrd.manage:main"
+glrd = "glrd.query:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
