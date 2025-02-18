@@ -118,38 +118,4 @@ class NoAliasDumper(yaml.SafeDumper):
     def ignore_aliases(self, data):
         return True
 
-def setup_logger(log_level, name='glrd'):
-    """
-    Configure and return a logger with the specified log level.
-    
-    Args:
-        log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        name (str): Logger name (default: 'glrd')
-        
-    Returns:
-        logging.Logger: Configured logger instance
-    """
-    # Get or create logger
-    logger = logging.getLogger(name)
-    
-    # Remove any existing handlers to prevent duplicates
-    logger.handlers = []
-    
-    # Prevent propagation to parent loggers
-    logger.propagate = False
-    
-    # Set level
-    logger.setLevel(log_level)
-    
-    # Create console handler with formatting
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(log_level)
-    formatter = logging.Formatter('%(message)s')  # Simplified format without prefix
-    console_handler.setFormatter(formatter)
-    
-    # Add handler to logger
-    logger.addHandler(console_handler)
-    
-    return logger
-
 signal.signal(signal.SIGPIPE, handle_broken_pipe_error)
