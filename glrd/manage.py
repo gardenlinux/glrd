@@ -12,12 +12,12 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
 
 import boto3
 import pytz
 import yaml
 from botocore.exceptions import ClientError
+from dateutil.relativedelta import relativedelta
 from deepdiff import DeepDiff
 from jsonschema import validate, ValidationError
 

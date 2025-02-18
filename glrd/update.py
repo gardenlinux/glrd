@@ -8,8 +8,6 @@ import boto3
 
 from glrd.manage import (
     download_all_s3_files,
-    # get_flavors_for_commit,
-    # get_s3_artifacts,
     upload_all_local_files
 )
 from glrd.util import DEFAULTS, ERROR_CODES
