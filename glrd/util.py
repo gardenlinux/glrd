@@ -76,8 +76,8 @@ def extract_version_data(tag_name):
     return (int(match.group(1)), int(match.group(2))) if match else (None, None)
 
 def get_current_timestamp():
-    """Get current timestamp in UTC."""
-    return int(datetime.now(pytz.UTC).timestamp())
+    """Get current timestamp."""
+    return int(datetime.now().timestamp())
 
 def timestamp_to_isotime(timestamp):
     """Convert timestamp to ISO time string."""
