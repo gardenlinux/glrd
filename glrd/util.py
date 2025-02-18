@@ -113,7 +113,10 @@ def handle_broken_pipe_error(signum, frame):
     except SystemExit:
         os._exit(0)
 
-signal.signal(signal.SIGPIPE, handle_broken_pipe_error)
+# Create a custom dumper class that doesn't generate anchors
+class NoAliasDumper(yaml.SafeDumper):
+    def ignore_aliases(self, data):
+        return True
 
 def setup_logger(log_level, name='glrd'):
     """
@@ -148,3 +151,5 @@ def setup_logger(log_level, name='glrd'):
     logger.addHandler(console_handler)
     
     return logger
+
+signal.signal(signal.SIGPIPE, handle_broken_pipe_error)

@@ -912,11 +912,6 @@ def save_output_file(data, filename, format="yaml"):
     """Save the data to a file in the specified format."""
     with open(filename, 'w') as file:
         if format == 'yaml':
-            # Create a custom dumper class that doesn't generate anchors
-            class NoAliasDumper(yaml.SafeDumper):
-                def ignore_aliases(self, data):
-                    return True
-            
             yaml.dump(data, file, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper)
         else:
             # Optimize JSON by removing unnecessary spaces
