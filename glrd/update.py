@@ -73,7 +73,7 @@ def load_releases_from_file(json_file):
             return data.get('releases', [])
     except Exception as e:
         logging.error(f"Error loading releases from {json_file}: {e}")
-        return []
+        sys.exit(ERROR_CODES["file_not_found"])
 
 def save_releases(releases, json_file):
     """Save releases to a JSON file."""
@@ -105,7 +105,7 @@ def fetch_s3_bucket_contents(args):
     
     except Exception as e:
         logging.error(f"Error fetching S3 bucket contents: {e}")
-        return []
+        sys.exit(ERROR_CODES["s3_error"])
 
 def update_flavors(release):
     """Update flavors for a release."""
@@ -176,7 +176,7 @@ def process_releases(args):
             logging.info("Successfully downloaded files from S3")
         except Exception as e:
             logging.error(f"Error downloading files from S3: {e}")
-            return
+            sys.exit(ERROR_CODES["s3_error"])
 
     # Get artifacts from artifacts bucket
     logging.info(f"Fetching artifacts data from S3 bucket {DEFAULTS['ARTIFACTS_S3_BUCKET_NAME']}")
@@ -271,6 +271,7 @@ def process_releases(args):
 
         except Exception as e:
             logging.error(f"Error processing {json_file}: {e}", exc_info=True)
+            sys.exit(ERROR_CODES["input_error"])
 
     # Upload to S3 if requested and files were modified
     if args.s3_update and successful_files:
@@ -280,6 +281,7 @@ def process_releases(args):
             logging.info("Successfully uploaded files to S3")
         except Exception as e:
             logging.error(f"Error uploading files to S3: {e}")
+            sys.exit(ERROR_CODES["s3_error"])
 
     # Log summary
     logging.info("\nUpdate Summary:")

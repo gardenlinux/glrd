@@ -250,12 +250,12 @@ def load_releases(input_source, is_url=False):
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            print(f"Error fetching data from URL: {e}")
-            exit(1)
+            logging.error(f"Error fetching data from URL: {e}")
+            sys.exit(ERROR_CODES['http_error'])
     else:
         if not os.path.exists(input_source):
-            print(f"Error: File {input_source} does not exist.")
-            exit(1)
+            logging.error(f"Error: File {input_source} does not exist.")
+            sys.exit(ERROR_CODES['file_not_found'])
         with open(input_source, 'r') as file:
             return json.load(file)
 
@@ -419,7 +419,7 @@ def format_flavors_with_urls(release):
         
     except Exception as e:
         logging.error(f"Error formatting flavors with URLs: {e}")
-        return {}
+        sys.exit(ERROR_CODES['format_error'])
 
 def get_oci_url(release):
     """Return the OCI image URL for a release."""
@@ -429,8 +429,9 @@ def get_oci_url(release):
         else:
             version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
         return f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
-    except Exception:
-        return 'N/A'
+    except Exception as e:
+        logging.error(f"Error getting OCI URL: {e}")
+        sys.exit(ERROR_CODES['format_error'])
 
 def process_query(args):
     """Process the query based on command line arguments."""

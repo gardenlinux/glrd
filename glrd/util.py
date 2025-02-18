@@ -15,6 +15,11 @@ ERROR_CODES = {
     "s3_error": 4,
     "query_error": 5,
     "parameter_missing": 6,
+    "invalid_field": 7,
+    "http_error": 8,
+    "file_not_found": 9,
+    "format_error": 10,
+    "input_error": 11,
 }
 
 DEFAULTS = {
@@ -87,7 +92,8 @@ def timestamp_to_isotime(timestamp):
         dt = datetime.fromtimestamp(timestamp, pytz.UTC)
         return dt.strftime('%H:%M:%S')
     except (ValueError, TypeError):
-        return 'N/A'
+        logging.error(f"Error converting timestamp to ISO time: {timestamp}")
+        sys.exit(ERROR_CODES['format_error'])
 
 def isodate_to_timestamp(isodate):
     """
