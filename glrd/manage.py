@@ -1073,8 +1073,10 @@ def upload_all_local_files(bucket_name, bucket_prefix):
         # First find all matching local files
         matching_files = []
         for file in os.listdir('.'):
-            if fnmatch.fnmatch(file, f"*releases*.{output_format}"):
-                matching_files.append(file)
+            for release_type in DEFAULTS['RELEASE_TYPES']:
+                filename = f"releases-{release_type}.json"
+                if fnmatch.fnmatch(file, filename):
+                    matching_files.append(file)
         
         if not matching_files:
             logging.warning(f"No release files found to upload")
@@ -1105,7 +1107,7 @@ def upload_all_local_files(bucket_name, bucket_prefix):
             
     except Exception as e:
         logging.error(f"Error accessing S3: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
+        sys.exit(ERROR_CODES["s3_error"])
 
 def handle_releases(args):
     """Handle the creation and deletion of initial or single releases."""
