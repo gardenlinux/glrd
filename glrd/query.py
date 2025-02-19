@@ -375,6 +375,8 @@ def parse_arguments():
     parser.add_argument('--no-header', action='store_true', 
                        help="Omit the header in shell output.")
     
+    parser.add_argument('-V', action='version', version=f'%(prog)s {get_version()}')
+    
     return parser.parse_args()
 
 def get_platform_from_flavor(flavor):
@@ -507,6 +509,8 @@ def process_query(args):
     format_output(args, releases, args.output_format, args.fields, args.no_header)
 
 def main():
+    parser = argparse.ArgumentParser(description='Garden Linux Release Database Query Tool')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {get_version()}')
     args = parse_arguments()
 
     process_query(args)

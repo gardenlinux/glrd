@@ -1,12 +1,14 @@
+import json
+import logging
 import os
 import re
 import signal
 import sys
-import pytz
-import json
-import yaml
-import logging
 from datetime import datetime
+
+import importlib.metadata
+import pytz
+import yaml
 
 ERROR_CODES = {
     "validation_error": 1,
@@ -73,6 +75,9 @@ DEFAULTS = {
         'vmware': 'ova',
     }
 }
+
+def get_version():
+    return importlib.metadata.version('glrd') 
 
 def extract_version_data(tag_name):
     """Extract major and minor version numbers from a tag."""

@@ -23,6 +23,8 @@ jobs:
         arch: [ amd64, arm64 ]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for poetry-dynamic-versioning
       - uses: ./.github/actions/setup
       - name: podman login
         run: |
@@ -30,7 +32,7 @@ jobs:
       - name: podman build
         run: |
           podman build --platform linux/${{ matrix.arch }} -t glrd .
-      - name: podman build
+      - name: podman save
         run: |
           podman save --format oci-archive glrd >/tmp/${{ matrix.arch }}-oci.tar
       - name: upload build-${{ matrix.arch }}
