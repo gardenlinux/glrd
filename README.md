@@ -144,9 +144,11 @@ The `glrd` script is a command-line utility for querying the GLRD. It allows you
 
 ### Usage
 
+#### Show help
+
 ```
 ❯ glrd --help
-usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}] [--input-url INPUT_URL] [--no-input-split] [--output-format {json,yaml,markdown,mermaid_gantt,shell}] [--output-description OUTPUT_DESCRIPTION] [--active] [--archived] [--latest] [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header]
+usage: glrd [-h] [--input-format {yaml,json}] [--input-file-prefix INPUT_FILE_PREFIX] [--input-type {file,url}] [--input-url INPUT_URL] [--no-input-split] [--output-format {json,yaml,markdown,mermaid_gantt,shell}] [--output-description OUTPUT_DESCRIPTION] [--active] [--archived] [--latest] [--type TYPE] [--version VERSION] [--fields FIELDS] [--no-header] [-V]
 
 Process and filter releases data from a file or URL.
 
@@ -170,60 +172,238 @@ options:
   --latest              Show the latest active major.minor release.
   --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next
   --version VERSION     Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0
-  --fields FIELDS       Comma-separated list of fields to output. E.g., --fields "Name, Version, Type, Git Commit, Release date, Release time, Extended maintenance, End of maintenance"
+  --fields FIELDS       Comma-separated list of fields to output. Possible fields: Name,Version,Type,GitCommit,GitCommitShort,ReleaseDate,ReleaseTime,ExtendedMaintenance,EndOfMaintenance,Flavors,OCI,AttributesSourceRepo (default: Name,Version,Type,GitCommitShort,ReleaseDate,ExtendedMaintenance,EndOfMaintenance)
   --no-header           Omit the header in shell output.
+  -V                    show program's version number and exit
 ```
 
 ### Get latest Garden Linux Version
 
+#### Default shell output
+
 ```
 # default shell output
 ❯ glrd --latest
-Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance  
-patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12 
+Name            Version  Type    GitCommitShort    ReleaseDate    ExtendedMaintenance    EndOfMaintenance
+patch-1592.6     1592.6  patch   cb05e11f          2025-02-19     N/A                    2025-08-12
+```
 
-# get only version field
+#### Get only version field
+
+```
 ❯ glrd --latest --fields Version --no-header
-1592.1
+1592.6
+```
 
-# get json output
+#### Get JSON output
+
+<details>
+  <summary>Details</summary>
+
+```
 ❯ glrd --latest --output-format json
 {
   "releases": [
     {
-      "name": "patch-1592.1",
+      "name": "patch-1592.6",
       "type": "patch",
       "version": {
         "major": 1592,
-        "minor": 1
+        "minor": 6
       },
       "lifecycle": {
         "released": {
-          "isodate": "2024-08-22",
-          "timestamp": 1724277600
+          "isodate": "2025-02-19",
+          "timestamp": 1739951325
         },
         "eol": {
           "isodate": "2025-08-12",
-          "timestamp": 1754949600
+          "timestamp": 1754956800
         }
       },
       "git": {
-        "commit": "ec945aa995d0f08d64303ff6045b313b40b665fb",
-        "commit_short": "ec945aa"
+        "commit": "cb05e11f0481b72d0a30da3662295315b220a436",
+        "commit_short": "cb05e11f"
       },
       "github": {
-        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.6"
       },
+      "flavors": {
+        "ali-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/ali-gardener_prod-amd64-1592.6-cb05e11f/ali-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/ali-gardener_prod-amd64-1592.6-cb05e11f/ali-gardener_prod-amd64-1592.6-cb05e11f.qcow2"
+        },
+        "ali-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/ali-gardener_prod-arm64-1592.6-cb05e11f/ali-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/ali-gardener_prod-arm64-1592.6-cb05e11f/ali-gardener_prod-arm64-1592.6-cb05e11f.qcow2"
+        },
+        "aws-gardener_persistence_prod_readonly_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f/aws-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f/aws-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_persistence_prod_readonly_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f/aws-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f/aws-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod-amd64-1592.6-cb05e11f/aws-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod-amd64-1592.6-cb05e11f/aws-gardener_prod-amd64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod-arm64-1592.6-cb05e11f/aws-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod-arm64-1592.6-cb05e11f/aws-gardener_prod-arm64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_prod_readonly_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f/aws-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f/aws-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_prod_readonly_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f/aws-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f/aws-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_prod_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_secureboot-amd64-1592.6-cb05e11f/aws-gardener_prod_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_secureboot-amd64-1592.6-cb05e11f/aws-gardener_prod_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "aws-gardener_prod_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_secureboot-arm64-1592.6-cb05e11f/aws-gardener_prod_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/aws-gardener_prod_secureboot-arm64-1592.6-cb05e11f/aws-gardener_prod_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "azure-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/azure-gardener_prod-amd64-1592.6-cb05e11f/azure-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/azure-gardener_prod-amd64-1592.6-cb05e11f/azure-gardener_prod-amd64-1592.6-cb05e11f.vhd"
+        },
+        "azure-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/azure-gardener_prod-arm64-1592.6-cb05e11f/azure-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/azure-gardener_prod-arm64-1592.6-cb05e11f/azure-gardener_prod-arm64-1592.6-cb05e11f.vhd"
+        },
+        "gcp-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gcp-gardener_prod-amd64-1592.6-cb05e11f/gcp-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gcp-gardener_prod-amd64-1592.6-cb05e11f/gcp-gardener_prod-amd64-1592.6-cb05e11f.gcpimage.tar.gz"
+        },
+        "gcp-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gcp-gardener_prod-arm64-1592.6-cb05e11f/gcp-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gcp-gardener_prod-arm64-1592.6-cb05e11f/gcp-gardener_prod-arm64-1592.6-cb05e11f.gcpimage.tar.gz"
+        },
+        "gdch-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gdch-gardener_prod-amd64-1592.6-cb05e11f/gdch-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gdch-gardener_prod-amd64-1592.6-cb05e11f/gdch-gardener_prod-amd64-1592.6-cb05e11f.gcpimage.tar.gz"
+        },
+        "gdch-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gdch-gardener_prod-arm64-1592.6-cb05e11f/gdch-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/gdch-gardener_prod-arm64-1592.6-cb05e11f/gdch-gardener_prod-arm64-1592.6-cb05e11f.gcpimage.tar.gz"
+        },
+        "kvm-gardener_persistence_prod_readonly_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f/kvm-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f/kvm-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_persistence_prod_readonly_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f/kvm-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f/kvm-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod-amd64-1592.6-cb05e11f/kvm-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod-amd64-1592.6-cb05e11f/kvm-gardener_prod-amd64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod-arm64-1592.6-cb05e11f/kvm-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod-arm64-1592.6-cb05e11f/kvm-gardener_prod-arm64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_prod_readonly_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f/kvm-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f/kvm-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_prod_readonly_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f/kvm-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f/kvm-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_prod_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_secureboot-amd64-1592.6-cb05e11f/kvm-gardener_prod_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_secureboot-amd64-1592.6-cb05e11f/kvm-gardener_prod_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "kvm-gardener_prod_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_secureboot-arm64-1592.6-cb05e11f/kvm-gardener_prod_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/kvm-gardener_prod_secureboot-arm64-1592.6-cb05e11f/kvm-gardener_prod_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_persistence_prod_readonly_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f/metal-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f/metal-gardener_persistence_prod_readonly_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_persistence_prod_readonly_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f/metal-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f/metal-gardener_persistence_prod_readonly_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod-amd64-1592.6-cb05e11f/metal-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod-amd64-1592.6-cb05e11f/metal-gardener_prod-amd64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod-arm64-1592.6-cb05e11f/metal-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod-arm64-1592.6-cb05e11f/metal-gardener_prod-arm64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod_pxe-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_pxe-amd64-1592.6-cb05e11f/metal-gardener_prod_pxe-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_pxe-amd64-1592.6-cb05e11f/metal-gardener_prod_pxe-amd64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod_pxe-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_pxe-arm64-1592.6-cb05e11f/metal-gardener_prod_pxe-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_pxe-arm64-1592.6-cb05e11f/metal-gardener_prod_pxe-arm64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod_readonly_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f/metal-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f/metal-gardener_prod_readonly_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod_readonly_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f/metal-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f/metal-gardener_prod_readonly_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod_secureboot-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_secureboot-amd64-1592.6-cb05e11f/metal-gardener_prod_secureboot-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_secureboot-amd64-1592.6-cb05e11f/metal-gardener_prod_secureboot-amd64-1592.6-cb05e11f.raw"
+        },
+        "metal-gardener_prod_secureboot-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_secureboot-arm64-1592.6-cb05e11f/metal-gardener_prod_secureboot-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/metal-gardener_prod_secureboot-arm64-1592.6-cb05e11f/metal-gardener_prod_secureboot-arm64-1592.6-cb05e11f.raw"
+        },
+        "openstack-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstack-gardener_prod-amd64-1592.6-cb05e11f/openstack-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstack-gardener_prod-amd64-1592.6-cb05e11f/openstack-gardener_prod-amd64-1592.6-cb05e11f.qcow2"
+        },
+        "openstack-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstack-gardener_prod-arm64-1592.6-cb05e11f/openstack-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstack-gardener_prod-arm64-1592.6-cb05e11f/openstack-gardener_prod-arm64-1592.6-cb05e11f.qcow2"
+        },
+        "openstackbaremetal-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstackbaremetal-gardener_prod-amd64-1592.6-cb05e11f/openstackbaremetal-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstackbaremetal-gardener_prod-amd64-1592.6-cb05e11f/openstackbaremetal-gardener_prod-amd64-1592.6-cb05e11f.qcow2"
+        },
+        "openstackbaremetal-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstackbaremetal-gardener_prod-arm64-1592.6-cb05e11f/openstackbaremetal-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/openstackbaremetal-gardener_prod-arm64-1592.6-cb05e11f/openstackbaremetal-gardener_prod-arm64-1592.6-cb05e11f.qcow2"
+        },
+        "vmware-gardener_prod-amd64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/vmware-gardener_prod-amd64-1592.6-cb05e11f/vmware-gardener_prod-amd64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/vmware-gardener_prod-amd64-1592.6-cb05e11f/vmware-gardener_prod-amd64-1592.6-cb05e11f.ova"
+        },
+        "vmware-gardener_prod-arm64": {
+          "metadata": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/vmware-gardener_prod-arm64-1592.6-cb05e11f/vmware-gardener_prod-arm64-1592.6-cb05e11f.manifest",
+          "image": "https://gardenlinux-github-releases.s3.amazonaws.com/objects/vmware-gardener_prod-arm64-1592.6-cb05e11f/vmware-gardener_prod-arm64-1592.6-cb05e11f.ova"
+        }
+      },
+      "oci": "ghcr.io/gardenlinux/gardenlinux:1592.6",
       "attributes": {
-        "source_repo": false
+        "source_repo": true
       }
     }
   ]
 }
+```
+</details>
 
-# get json output and filter for version
+#### Get json output and filter for version
+```
 ❯ glrd --latest --output-format json | jq -r '.releases[] | "\(.version.major).\(.version.minor)"'
-1592.1
+1592.6
 ```
 
 ### Get all active and supported Garden Linux Versions
@@ -268,30 +448,31 @@ gantt
 
 The `glrd-manage` script is used to generate release data for Garden Linux. It can create initial releases by fetching data from GitHub, generate individual release entries, and manage release data files.
 
-### Usage
+### Show help
 
 ```
 ❯ glrd-manage --help
-usage: glrd-manage [-h] [--delete DELETE]
-                   [--create-initial-releases CREATE_INITIAL_RELEASES]
-                   [--create CREATE] [--version VERSION] [--commit COMMIT]
-                   [--lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME]
-                   [--lifecycle-extended-isodatetime LIFECYCLE_EXTENDED_ISODATETIME]
-                   [--lifecycle-eol-isodatetime LIFECYCLE_EOL_ISODATETIME]
-                   [--no-query] [--input-stdin] [--input]
-                   [--input-file INPUT_FILE]
-                   [--output-file-prefix OUTPUT_FILE_PREFIX]
-                   [--output-format {yaml,json}] [--no-output-split]
-                   [--s3-bucket-name S3_BUCKET_NAME]
-                   [--s3-bucket-prefix S3_BUCKET_PREFIX]
-                   [--s3-bucket-region S3_BUCKET_REGION] [--s3-create-bucket]
-                   [--s3-update] [--log-level {ERROR,WARNING,INFO,DEBUG}]
-                   [--output-all] [--input-all]                   
+usage: glrd-manage [-h] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--input-file INPUT_FILE] [--output-format {yaml,json}] [--output-file-prefix OUTPUT_FILE_PREFIX] [--s3-bucket-name S3_BUCKET_NAME] [--s3-bucket-region S3_BUCKET_REGION] [--s3-bucket-prefix S3_BUCKET_PREFIX] [--delete DELETE] [--create-initial-releases CREATE_INITIAL_RELEASES] [--create CREATE]
+                   [--version VERSION] [--commit COMMIT] [--lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME] [--lifecycle-extended-isodatetime LIFECYCLE_EXTENDED_ISODATETIME] [--lifecycle-eol-isodatetime LIFECYCLE_EOL_ISODATETIME] [--no-query] [--input-stdin] [--input] [--no-output-split] [--s3-create-bucket] [--s3-update] [--output-all] [--input-all] [-V]
 
-Create or delete Garden Linux releases in the GLRD.
+Manage Garden Linux releases data.
 
 options:
   -h, --help            show this help message and exit
+  --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                        Set the logging level
+  --input-file INPUT_FILE
+                        The name of the input file (default: releases-input.yaml).
+  --output-format {yaml,json}
+                        Output format: yaml or json (default: yaml).
+  --output-file-prefix OUTPUT_FILE_PREFIX
+                        The prefix for output files (default: releases).
+  --s3-bucket-name S3_BUCKET_NAME
+                        Name of S3 bucket. Defaults to 'gardenlinux-glrd'.
+  --s3-bucket-region S3_BUCKET_REGION
+                        Region for S3 bucket. Defaults to 'eu-central-1'.
+  --s3-bucket-prefix S3_BUCKET_PREFIX
+                        Prefix for S3 bucket objects. Defaults to empty string.
   --delete DELETE       Delete a release by name (format: type-major.minor). Requires --s3-update.
   --create-initial-releases CREATE_INITIAL_RELEASES
                         Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.
@@ -307,24 +488,12 @@ options:
   --no-query            Do not query and use existing releases using glrd command. Be careful, this can delete your releases.
   --input-stdin         Process a single input from stdin (JSON data).
   --input               Process input from --input-file.
-  --input-file INPUT_FILE
-                        The name of the input file (default: releases-input.yaml).
-  --output-file-prefix OUTPUT_FILE_PREFIX
-                        The prefix added to the output file (default: releases).
-  --output-format {yaml,json}
-                        Output format: 'yaml' or 'json' (default: json).
   --no-output-split     Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.
-  --s3-bucket-name S3_BUCKET_NAME
-                        Name of S3 bucket. Defaults to 'gardenlinux-glrd'.
-  --s3-bucket-prefix S3_BUCKET_PREFIX
-                        Prefix inside S3 bucket. Defaults to ''.
-  --s3-bucket-region S3_BUCKET_REGION
-                        Name of S3 bucket Region. Defaults to 'eu-central-1'.
   --s3-create-bucket    Create an S3 bucket.
   --s3-update           Update (merge) the generated files with S3.
-  --log-level {ERROR,WARNING,INFO,DEBUG}
-  --output-all          Download and write all release files found in S3 to local disk.
-  --input-all           Upload all local release files to S3.
+  --output-all          Download and write all release files found in S3 to local disk
+  --input-all           Upload all local release files to S3
+  -V                    show program's version number and exit
 ```
 
 ### Testing release creation
@@ -379,6 +548,12 @@ This will generate/update a release from JSON data and upload it to the default 
       "github": {
         "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
       },
+      "flavors": [
+        "ali-gardener_prod",
+        "azure-gardener_prod",
+        "aws-gardener_prod",
+        "gcp-gardener_prod"
+      ],
       "attributes": {
         "source_repo": false
       }
@@ -409,6 +584,11 @@ releases:
       commit_short: ec945aa
     github:
       release: https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1
+    flavors:
+      - ali-gardener_prod
+      - azure-gardener_prod
+      - aws-gardener_prod
+      - gcp-gardener_prod
     attributes:
       source_repo: false
 
@@ -493,6 +673,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
   - **`commit_short`**: The short git commit hash (first 7 characters).
 - **`github`**:
   - **`release`**: The URL to the GitHub release page.
+- **`flavors`**: A list of flavors that are included in this release. `glrd` creates `metadata`, `image` and/or `oci` links for each flavor.
 - **`attributes`**: An object that does contain additional metadata about the release.
   - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
@@ -514,6 +695,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+- **`flavors`**: A list of flavors that are included in this release. `glrd` creates `metadata`, `image` and/or `oci` links for each flavor.
 - **`attributes`**: An object that does contain additional metadata about the release.
   - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
@@ -535,6 +717,7 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 - **`git`**:
   - **`commit`**: The full git commit hash associated with the release.
   - **`commit_short`**: The short git commit hash.
+- **`flavors`**: A list of flavors that are included in this release. `glrd` creates `metadata`, `image` and/or `oci` links for each flavor.
 - **`attributes`**: An object that does contain additional metadata about the release.
   - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
