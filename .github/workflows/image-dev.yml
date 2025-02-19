@@ -30,7 +30,7 @@ jobs:
       - name: podman build
         run: |
           podman build --platform linux/${{ matrix.arch }} -t glrd .
-      - name: podman build
+      - name: podman save
         run: |
           podman save --format oci-archive glrd >/tmp/${{ matrix.arch }}-oci.tar
       - name: upload build-${{ matrix.arch }}
