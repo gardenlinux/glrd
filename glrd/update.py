@@ -10,7 +10,7 @@ from glrd.manage import (
     download_all_s3_files,
     upload_all_local_files
 )
-from glrd.util import DEFAULTS, ERROR_CODES
+from glrd.util import *
 
 from python_gardenlinux_lib.flavors.parse_flavors import *
 from python_gardenlinux_lib.s3.s3 import *
@@ -45,6 +45,8 @@ def parse_arguments():
     
     parser.add_argument('--version', type=str,
                       help="Only process releases with this version (format: major.minor)")
+    
+    parser.add_argument('-V', action='version', version=f'%(prog)s {get_version()}')
     
     args = parser.parse_args()
     

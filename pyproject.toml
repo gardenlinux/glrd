@@ -1,4 +1,5 @@
 [project]
+name = "glrd"
 dynamic = ["version"]
 
 [tool.poetry]
@@ -24,6 +25,15 @@ python-gardenlinux-lib = { git = "https://github.com/gardenlinux/python-gardenli
 
 [tool.poetry-dynamic-versioning]
 enable = true
+vcs = "git"
+style = "pep440"
+pattern = '''(?x)
+    v(?P<base>\d+\.\d+\.\d+)
+'''
+strict = true
+dirty = true
+metadata = true
+tagged-metadata = false
 
 [tool.poetry.scripts]
 glrd-update = "glrd.update:main"

@@ -1312,6 +1312,7 @@ def parse_arguments():
                        help="Download and write all release files found in S3 to local disk")
     parser.add_argument('--input-all', action='store_true',
                        help="Upload all local release files to S3")
+    parser.add_argument('-V', action='version', version=f'%(prog)s {get_version()}')
 
     args = parser.parse_args()
 
