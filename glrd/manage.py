@@ -1247,13 +1247,27 @@ def handle_splitted_output(args, bucket_name, bucket_prefix, releases):
     for release_type in DEFAULTS['RELEASE_TYPES']:
         releases_filtered = [r for r in releases if r['type'] == release_type]
         if releases_filtered:
-            output_file = f"{args.output_file_prefix}-{release_type}.{args.output_format}"
-            save_output_file({'releases': releases_filtered}, filename=output_file, format=args.output_format)
+            # Always use json format for S3 storage
+            s3_output_file = f"{args.output_file_prefix}-{release_type}.json"
+            # Use requested format for local file
+            local_output_file = f"{args.output_file_prefix}-{release_type}.{args.output_format}"
+
+            # Save local file in requested format
+            save_output_file({'releases': releases_filtered}, filename=local_output_file, format=args.output_format)
 
             # Handle S3 upload if the argument is provided
             if args.s3_update:
-                releases_filtered = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}", output_file, releases_filtered)
-                upload_to_s3(output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}")
+                # For S3, always use JSON format
+                save_output_file({'releases': releases_filtered}, filename=s3_output_file, format='json')
+                releases_filtered = merge_existing_s3_data(bucket_name, f"{bucket_prefix}{s3_output_file}", s3_output_file, releases_filtered)
+                upload_to_s3(s3_output_file, bucket_name, f"{bucket_prefix}{s3_output_file}")
+
+                # Clean up temporary JSON file if local format is different
+                if args.output_format != 'json':
+                    try:
+                        os.remove(s3_output_file)
+                    except OSError:
+                        pass
 
 def handle_output(args, bucket_name, bucket_prefix, releases):
     """Handle output of not splitted releases to disk and S3."""
