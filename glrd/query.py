@@ -141,9 +141,9 @@ def format_tabular_output(releases, fields, no_header, output_format):
     headers = selected_fields if not no_header else ()
 
     if output_format == 'shell':
-        return tabulate.tabulate(rows, headers, tablefmt="plain")
+        return tabulate.tabulate(rows, headers, tablefmt="plain", disable_numparse=True)
     elif output_format == 'markdown':
-        return tabulate.tabulate(rows, headers, tablefmt="pipe")
+        return tabulate.tabulate(rows, headers, tablefmt="pipe", disable_numparse=True)
 
 def filter_fields(headers, rows, requested_fields):
     """Filter columns in tabular data based on requested fields."""
