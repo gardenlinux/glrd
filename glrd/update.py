@@ -20,39 +20,39 @@ logger = logging.getLogger(__name__)
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Update existing releases with fields that were added to the schema.")
-    
-    parser.add_argument('--log-level', type=str, 
+
+    parser.add_argument('--log-level', type=str,
                       choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                       default='INFO', help="Set the logging level")
-    
+
     parser.add_argument('--s3-download', action='store_true',
                       help="Download files from S3 first")
 
     parser.add_argument('--s3-update', action='store_true',
                       help="Upload files to S3 after processing")
-    
+
     parser.add_argument('--s3-bucket-name', type=str,
                       default=DEFAULTS['GLRD_S3_BUCKET_NAME'],
                       help="Name of S3 bucket for artifacts")
-    
+
     parser.add_argument('--s3-bucket-region', type=str,
                       default=DEFAULTS['GLRD_S3_BUCKET_REGION'],
                       help="Region for S3 bucket")
-    
+
     parser.add_argument('--s3-bucket-prefix', type=str,
                       default=DEFAULTS['GLRD_S3_BUCKET_PREFIX'],
                       help="Prefix for S3 bucket objects")
-    
+
     parser.add_argument('--version', type=str,
                       help="Only process releases with this version (format: major.minor)")
-    
+
     parser.add_argument('-V', action='version', version=f'%(prog)s {get_version()}')
-    
+
     args = parser.parse_args()
-    
+
     # Convert log level to uppercase if provided in lowercase
     args.log_level = args.log_level.upper()
-    
+
     # Parse version if provided
     if args.version:
         try:
@@ -64,7 +64,7 @@ def parse_arguments():
         except (ValueError, IndexError) as e:
             logging.error(f"Invalid version format: {e}")
             sys.exit(ERROR_CODES["parameter_missing"])
-    
+
     return args
 
 def load_releases_from_file(json_file):
@@ -92,19 +92,19 @@ def fetch_s3_bucket_contents(args):
         s3_client = boto3.client('s3', region_name=args.s3_bucket_region)
         bucket_name = args.s3_bucket_name
         prefix = args.s3_bucket_prefix
-        
+
         logging.info(f"Fetching objects from s3://{bucket_name}/{prefix}")
-        
+
         paginator = s3_client.get_paginator('list_objects_v2')
         all_objects = []
-        
+
         for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
             if 'Contents' in page:
                 all_objects.extend(page['Contents'])
-        
+
         logging.info(f"Found {len(all_objects)} objects")
         return all_objects
-    
+
     except Exception as e:
         logging.error(f"Error fetching S3 bucket contents: {e}")
         sys.exit(ERROR_CODES["s3_error"])
@@ -120,8 +120,8 @@ def update_flavors(release):
 
     # First try flavors.yaml
     flavors = parse_flavors_commit(
-        commit, 
-        version=version, 
+        commit,
+        version=version,
         query_s3=False,
         logger=logger
     )
@@ -159,7 +159,7 @@ def update_source_repo_attribute(releases):
     for release in releases:
         major = int(release['version'].get('major', 0))
         minor = int(release['version'].get('minor', 0))
-        
+
         if (major > 1592) or (major == 1592 and minor >= 4):
             release['attributes'] = {'source_repo': True}
         else:
@@ -214,43 +214,43 @@ def process_releases(args):
             modified = False
             releases_processed = 0
             releases_updated = 0
-            
+
             for release in releases:
                 releases_processed += 1
                 total_releases_processed += 1
-                
+
                 release_name = release.get('name', 'unknown')
                 release_type = release.get('type', 'unknown')
-                
+
                 # Only process patch, nightly, and dev releases
                 if release_type not in ['patch', 'nightly', 'dev']:
                     logging.debug(f"Skipping {release_type} release {release_name}: not a patch/nightly/dev release")
                     continue
-                
+
                 version = release.get('version', {})
                 version_info = f"{version.get('major', '?')}.{version.get('minor', '?')}"
-                
+
                 # Skip if version filter is active and doesn't match
                 if args.version:
-                    if (version.get('major') != args.version_major or 
+                    if (version.get('major') != args.version_major or
                         version.get('minor') != args.version_minor):
                         logging.debug(f"Skipping {release_type} release {release_name}: version {version_info} doesn't match filter {args.version}")
                         continue
-                
+
                 if 'git' not in release:
                     logging.debug(f"Skipping {release_type} release {release_name}: no git information")
                     continue
-                    
+
                 commit = release['git'].get('commit')
                 if not commit:
                     logging.debug(f"Skipping {release_type} release {release_name}: no commit hash")
                     continue
 
                 logging.info(f"Processing {release_type} release {release_name} (version {version_info}, commit {commit[:8]})")
-                
+
                 # Update source repo attribute
                 update_source_repo_attribute([release])
-                
+
                 # Get flavors for this commit using artifacts data
                 flavors = parse_flavors_commit(commit, version=version, query_s3=True, s3_objects=artifacts_data)
                 if flavors:

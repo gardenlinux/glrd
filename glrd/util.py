@@ -37,7 +37,7 @@ DEFAULTS = {
     'QUERY_INPUT_FORMAT': 'json',
     'QUERY_OUTPUT_TYPE': 'shell',
     'QUERY_OUTPUT_DESCRIPTION': 'Garden Linux Releases',
-    
+
     # Manage defaults
     'MANAGE_INPUT_FILE': 'releases-input.yaml',
     'MANAGE_OUTPUT_FORMAT': 'yaml',
@@ -47,7 +47,7 @@ DEFAULTS = {
     'GLRD_S3_BUCKET_NAME': 'gardenlinux-glrd',
     'GLRD_S3_BUCKET_PREFIX': '',
     'GLRD_S3_BUCKET_REGION': 'eu-central-1',
-    
+
     # S3 configuration for releases artifacts
     'ARTIFACTS_S3_BUCKET_NAME': 'gardenlinux-github-releases',
     'ARTIFACTS_S3_PREFIX': 'objects/',
@@ -60,7 +60,7 @@ DEFAULTS = {
 
     # Container registry configuration
     'CONTAINER_REGISTRY': 'ghcr.io/gardenlinux/gardenlinux',
-    
+
     # Platform file extensions
     'PLATFORM_EXTENSIONS': {
         'ali': 'qcow2',
@@ -77,7 +77,7 @@ DEFAULTS = {
 }
 
 def get_version():
-    return importlib.metadata.version('glrd') 
+    return importlib.metadata.version('glrd')
 
 def extract_version_data(tag_name):
     """Extract major and minor version numbers from a tag."""

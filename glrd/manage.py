@@ -268,9 +268,9 @@ def cleanup_temp_repo():
 
 def glrd_query_type(args, release_type):
     """Retrieve releases of a specific type."""
-    releases = load_all_releases(release_type, DEFAULTS['QUERY_INPUT_TYPE'], 
-                               DEFAULTS['QUERY_INPUT_URL'], 
-                               DEFAULTS['QUERY_INPUT_FILE_PREFIX'], 
+    releases = load_all_releases(release_type, DEFAULTS['QUERY_INPUT_TYPE'],
+                               DEFAULTS['QUERY_INPUT_URL'],
+                               DEFAULTS['QUERY_INPUT_FILE_PREFIX'],
                                DEFAULTS['QUERY_INPUT_FORMAT'])
     if not releases:
         logging.error(f"Error retrieving releases: {result.stderr}")
@@ -471,7 +471,7 @@ def create_initial_nightly_releases(stable_releases):
 
     # Set the default start date to 2020-06-09 06:00 UTC
     start_date_default = datetime(2020, 6, 9, 6, 0, 0, tzinfo=pytz.UTC)
-    
+
     if stable_releases:
         # Get the earliest stable release timestamp
         first_stable_release = min(stable_releases, key=lambda r: r['lifecycle']['released']['timestamp'])
@@ -620,9 +620,9 @@ def create_single_release(release_type, args, existing_releases):
 
         if artifacts_data:
             flavors = parse_flavors_commit(
-                commit, 
-                version=version, 
-                query_s3=True, 
+                commit,
+                version=version,
+                query_s3=True,
                 s3_objects=artifacts_data,
                 logger=logging.getLogger()
             )
@@ -650,7 +650,7 @@ def create_single_release(release_type, args, existing_releases):
         release['git']['commit_short'] = commit_short
         release['flavors'] = flavors
         release['attributes'] = {}
-        release['attributes']['source_repo'] = True 
+        release['attributes']['source_repo'] = True
     elif release_type == "next":
         release['name'] = f"{release_type}"
         release['lifecycle']['extended'] = {}
@@ -680,7 +680,7 @@ def create_single_release(release_type, args, existing_releases):
         release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
         release['flavors'] = flavors
         release['attributes'] = {}
-        release['attributes']['source_repo'] = True 
+        release['attributes']['source_repo'] = True
 
     logging.debug(f"Release '{release['name']}' created.")
     return release
@@ -1038,14 +1038,14 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
 def download_all_s3_files(bucket_name, bucket_prefix):
     """Download all release files from S3 bucket."""
     s3_client = get_s3_client()
-    
+
     try:
         # List all objects in the bucket with the given prefix
         paginator = s3_client.get_paginator('list_objects_v2')
         found_files = False
-        
+
         logging.info(f"Looking for files in s3://{bucket_name}/{bucket_prefix}")
-        
+
         for page in paginator.paginate(Bucket=bucket_name, Prefix=bucket_prefix):
             if 'Contents' in page:
                 found_files = True
@@ -1054,21 +1054,21 @@ def download_all_s3_files(bucket_name, bucket_prefix):
                     if key.endswith('.json'):
                         local_file = os.path.basename(key)
                         download_from_s3(bucket_name, key, local_file)
-        
+
         if not found_files:
             logging.warning(f"No release files found in s3://{bucket_name}/{bucket_prefix}")
             # Create empty files for each release type
             for release_type in DEFAULTS['RELEASE_TYPES']:
                 filename = f"releases-{release_type}.json"
                 save_output_file({'releases': []}, filename, 'json')
-            
+
     except Exception as e:
         logging.error(f"Error downloading files from S3: {e}")
 
 def upload_all_local_files(bucket_name, bucket_prefix):
     """Upload all local release files to S3."""
     s3_client = boto3.client('s3')
-    
+
     try:
         # First find all matching local files
         matching_files = []
@@ -1077,22 +1077,22 @@ def upload_all_local_files(bucket_name, bucket_prefix):
                 filename = f"releases-{release_type}.json"
                 if fnmatch.fnmatch(file, filename):
                     matching_files.append(file)
-        
+
         if not matching_files:
             logging.warning(f"No release files found to upload")
             return
-            
+
         # Show what will be uploaded and ask for confirmation
         print("\nThe following files will be uploaded to S3:")
         for file in matching_files:
             bucket_key = f"{bucket_prefix}{file}"
             print(f"  {file} -> s3://{bucket_name}/{bucket_key}")
-            
+
         response = input("\nDo you really want to upload these files to S3? [y/N] ").lower()
         if response != 'y':
             print("Upload cancelled.")
             return
-            
+
         # Proceed with upload
         files_uploaded = 0
         for file in matching_files:
@@ -1102,9 +1102,9 @@ def upload_all_local_files(bucket_name, bucket_prefix):
                 files_uploaded += 1
             except Exception as e:
                 logging.error(f"Error uploading {file}: {e}")
-        
+
         logging.info(f"Successfully uploaded {files_uploaded} release files")
-            
+
     except Exception as e:
         logging.error(f"Error accessing S3: {e}")
         sys.exit(ERROR_CODES["s3_error"])
@@ -1114,7 +1114,7 @@ def handle_releases(args):
     if args.input_all:
         upload_all_local_files(args.s3_bucket_name, args.s3_bucket_prefix)
         return
-        
+
     if args.output_all:
         download_all_s3_files(args.s3_bucket_name, args.s3_bucket_prefix)
         return
@@ -1124,7 +1124,7 @@ def handle_releases(args):
 
     create_initial_stable, create_initial_patch, create_initial_nightly = False, False, False
     next_releases, stable_releases, patch_releases, nightly_releases, dev_releases = [], [], [], [], []
-    
+
     if args.create_initial_releases:
         create_initial_list = args.create_initial_releases.split(',')
         create_initial_stable = 'stable' in create_initial_list
@@ -1282,34 +1282,34 @@ def handle_output(args, bucket_name, bucket_prefix, releases):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Manage Garden Linux releases data.")
-    
-    parser.add_argument('--log-level', type=str, 
+
+    parser.add_argument('--log-level', type=str,
                       choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                       default='INFO', help="Set the logging level")
-    
+
     parser.add_argument('--input-file', type=str, default=DEFAULTS['MANAGE_INPUT_FILE'],
                       help="The name of the input file (default: releases-input.yaml).")
-    
+
     parser.add_argument('--output-format', type=str, choices=['yaml', 'json'],
                       default=DEFAULTS['MANAGE_OUTPUT_FORMAT'],
                       help="Output format: yaml or json (default: yaml).")
-    
+
     parser.add_argument('--output-file-prefix', type=str,
                       default=DEFAULTS['MANAGE_OUTPUT_FILE_PREFIX'],
                       help="The prefix for output files (default: releases).")
-    
+
     parser.add_argument('--s3-bucket-name', type=str,
                       default=DEFAULTS['GLRD_S3_BUCKET_NAME'],
                       help="Name of S3 bucket. Defaults to 'gardenlinux-glrd'.")
-    
+
     parser.add_argument('--s3-bucket-region', type=str,
                       default=DEFAULTS['GLRD_S3_BUCKET_REGION'],
                       help="Region for S3 bucket. Defaults to 'eu-central-1'.")
-    
+
     parser.add_argument('--s3-bucket-prefix', type=str,
                       default=DEFAULTS['GLRD_S3_BUCKET_PREFIX'],
                       help="Prefix for S3 bucket objects. Defaults to empty string.")
-    
+
     parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
     parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
     parser.add_argument('--create', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
@@ -1324,7 +1324,7 @@ def parse_arguments():
     parser.add_argument('--no-output-split', action='store_true', help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.")
     parser.add_argument('--s3-create-bucket', action='store_true', help="Create an S3 bucket.")
     parser.add_argument('--s3-update', action='store_true', help="Update (merge) the generated files with S3.")
-    parser.add_argument('--output-all', action='store_true', 
+    parser.add_argument('--output-all', action='store_true',
                        help="Download and write all release files found in S3 to local disk")
     parser.add_argument('--input-all', action='store_true',
                        help="Upload all local release files to S3")
