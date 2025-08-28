@@ -21,6 +21,9 @@ from dateutil.relativedelta import relativedelta
 from deepdiff import DeepDiff
 from jsonschema import validate, ValidationError
 
+from glrd.schema_v1 import SCHEMA_V1
+from glrd.schema_v2 import SCHEMA_V2
+
 from glrd.query import load_all_releases
 from glrd.util import *
 from python_gardenlinux_lib.flavors.parse_flavors import *
@@ -29,233 +32,68 @@ from python_gardenlinux_lib.s3.s3 import *
 # silence boto3 logging
 boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
 
-# JSON schema for stable, patch, and nightly releases
-SCHEMAS = {
-    "next": {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "type": {"enum": ["next"]},
-            "version": {
-                "type": "object",
-                "properties": { "major": {"enum": ["next"]}},
-                "required": ["major"]
-            },
-            "lifecycle": {
-                "type": "object",
-                "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]},
-                    "extended": {
-                        "type": "object",
-                        "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    },
-                    "eol": {
-                        "type": "object",
-                        "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    }
-                },
-                "required": ["released", "extended", "eol"]
-            }
-        },
-        "required": ["name", "type", "version", "lifecycle"]
-    },
-    "stable": {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "type": {"enum": ["stable"]},
-            "version": {
-                "type": "object",
-                "properties": {"major": {"type": "integer"}},
-                "required": ["major"]
-            },
-            "lifecycle": {
-                "type": "object",
-                "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]},
-                    "extended": {
-                        "type": "object",
-                        "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    },
-                    "eol": {
-                        "type": "object",
-                        "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    }
-                },
-                "required": ["released", "extended", "eol"]
-            }
-        },
-        "required": ["name", "type", "version", "lifecycle"]
-    },
-    "patch": {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "type": {"enum": ["patch"]},
-            "version": {
-                "type": "object",
-                "properties": {
-                    "major": {"type": "integer"},
-                    "minor": {"type": "integer"}
-                },
-                "required": ["major", "minor"]
-            },
-            "lifecycle": {
-                "type": "object",
-                "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]},
-                    "eol": {
-                        "type": "object",
-                        "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    }
-                },
-                "required": ["released", "eol"]
-            },
-            "git": {
-                "type": "object",
-                "properties": {
-                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
-                },
-                "required": ["commit", "commit_short"]
-            },
-            "github": {
-                "type": "object",
-                "properties": {"release": {"type": "string", "format": "uri"}},
-                "required": ["release"]
-            },
-            "flavors": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "attributes": {
-                "type": "object",
-                "properties": {
-                    "source_repo": {
-                        "type": "boolean",
-                        "default": True
-                    }
-                },
-                "required": ["source_repo"]
-            }
-        },
-        "required": ["name", "type", "version", "lifecycle", "git", "github"]
-    },
-    "nightly": {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "type": {"enum": ["nightly"]},
-            "version": {
-                "type": "object",
-                "properties": {"major": {"type": "integer"}, "minor": {"type": "integer"}},
-                "required": ["major", "minor"]
-            },
-            "lifecycle": {
-                "type": "object",
-                "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]}
-                },
-                "required": ["released"]
-            },
-            "git": {
-                "type": "object",
-                "properties": {
-                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
-                },
-                "required": ["commit", "commit_short"]
-            },
-            "flavors": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "attributes": {
-                "type": "object",
-                "properties": {
-                    "source_repo": {
-                        "type": "boolean",
-                        "default": True
-                    }
-                },
-                "required": ["source_repo"]
-            }
-        },
-        "required": ["name", "type", "version", "lifecycle", "git"]
-    },
-    "dev": {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "type": {"enum": ["dev"]},
-            "version": {
-                "type": "object",
-                "properties": {"major": {"type": "integer"}, "minor": {"type": "integer"}},
-                "required": ["major", "minor"]
-            },
-            "lifecycle": {
-                "type": "object",
-                "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]}
-                },
-                "required": ["released"]
-            },
-            "git": {
-                "type": "object",
-                "properties": {
-                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
-                },
-                "required": ["commit", "commit_short"]
-            },
-            "flavors": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "attributes": {
-                "type": "object",
-                "properties": {
-                    "source_repo": {
-                        "type": "boolean",
-                        "default": True
-                    }
-                },
-                "required": ["source_repo"]
-            }
-        },
-        "required": ["name", "type", "version", "lifecycle", "git"]
-    }
-}
+def validate_input_version_format(version, release_type):
+    """
+    Validate that the input version format matches schema requirements.
+
+    Args:
+        version: Version from user input
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+
+    version_parts = version.split('.')
+
+    if release_type in ['stable', 'next']:
+        # stable and next don't use major.minor.micro
+        return True, None
+
+    if len(version_parts) == 2:
+        major = int(version_parts[0])
+        # Check if this version requires v2 schema (with micro field)
+        if major >= 2000:
+            return False, f"Version {'.'.join(version_parts)} requires v2 schema but missing micro version. Use format: major.minor.micro"
+        return True, None
+    elif len(version_parts) == 3:
+        major = int(version_parts[0])
+        # Check if this version should use v1 schema (without micro field)
+        if major < 2000:
+            return False, f"Version {'.'.join(version_parts)} uses v1 schema but includes micro version. Use format: major.minor"
+        return True, None
+    else:
+        return False, f"Invalid version format. Expected major.minor or major.minor.micro"
+
+def get_schema_for_release(release):
+    """
+    Get the appropriate schema version for a release based on its version number.
+
+    Args:
+        release: Release dictionary containing type and version information
+
+    Returns:
+        Schema dictionary appropriate for the release version
+    """
+    release_type = release.get('type')
+    version = release.get('version', {})
+
+    # For stable and next releases, always use v2 schema (they don't have major.minor.micro version numbers >= 2000)
+    if release_type in ['stable', 'next']:
+        return SCHEMA_V2[release_type]
+
+    # For patch, nightly, and dev releases, determine schema version based on version number
+    if release_type in ['patch', 'nightly', 'dev']:
+        major = version.get('major', 0)
+        minor = version.get('minor', 0)
+        micro = version.get('micro', 0)
+
+        # Use v2 schema (with micro field) for versions >= 2000.0.0
+        if major >= 2000:
+            return SCHEMA_V2[release_type]
+        else:
+            return SCHEMA_V1[release_type]
+
+    return None
 
 # Global variable to store the path of the cloned gardenlinux repository (cached)
 repo_clone_path = None
@@ -373,11 +211,12 @@ def get_git_commit_at_time(date, time="06:00", branch="main", remote_repo=DEFAUL
 
 def get_garden_version_for_date(release_type, date, existing_releases):
     """
-    Create major and minor version based on the Garden Linux base_date.
+    Create major.minor.micro version based on the Garden Linux base_date.
     Logic is taken from `gardenlinux/bin/garden-version`.
 
     Major: days since base date.
     Minor: Next available minor version based on existing releases.
+    Micro: Next available micro version based on existing releases.
     """
     # Calculate major version
     base_date = datetime(2020, 3, 31, tzinfo=pytz.UTC)
@@ -385,8 +224,10 @@ def get_garden_version_for_date(release_type, date, existing_releases):
 
     if release_type == 'next':
         minor = 0
+        micro = 0
     elif release_type == 'stable':
         minor = 0
+        micro = 0
     else:
         # Collect existing minor versions for the given major version and release type
         existing_minor_versions = [
@@ -394,34 +235,45 @@ def get_garden_version_for_date(release_type, date, existing_releases):
             for release in existing_releases
             if release['type'] == release_type and release['version']['major'] == major
         ]
+        existing_micro_versions = [
+            release['version'].get('micro', -1)
+            for release in existing_releases
+            if release['type'] == release_type and release['version']['major'] == major and release['version']['minor'] == minor
+        ]
 
-        logging.debug(f"Existing minor versions for major {major}: {existing_minor_versions}")
+        logging.debug(f"Existing micro versions for major {major} and minor {minor}: {existing_micro_versions}")
 
         if existing_minor_versions:
             minor = max(existing_minor_versions) + 1
         else:
             minor = 0
 
-    logging.debug(f"New {release_type} version for {date} is {major}.{minor}")
+        if existing_micro_versions:
+            micro = max(existing_micro_versions) + 1
+        else:
+            micro = 0
 
-    return major, minor
+    logging.debug(f"New {release_type} version for {date} is {major}.{minor}.{micro}")
+
+    return major, minor, micro
 
 def create_initial_releases(releases):
     """Generate initial stable and patch releases."""
     release_data_stable = []
     release_data_patch = []
     latest_minor_versions = {}
+    latest_micro_versions = {}
 
     releases.sort(key=lambda r: extract_version_data(r['tag_name']))
 
     for release in releases:
         tag_name = release.get('tag_name')
-        major, minor = extract_version_data(tag_name)
+        major, minor, micro = extract_version_data(tag_name)
         if major is None:
             continue
 
         # Determine release type: "patch" if minor exists, otherwise "stable"
-        release_type = "patch" if minor is not None else "stable"
+        release_type = "patch" if minor is not None and micro is not None else "stable"
 
         release_info = {
             "name": f"{release_type}-{tag_name}",
@@ -446,6 +298,7 @@ def create_initial_releases(releases):
             if release_type == "patch":
                 commit, commit_short = get_git_commit_from_tag(tag_name)
                 release_info['version']['minor'] = minor
+                release_info['version']['micro'] = micro
                 release_info['git'] = {
                     "commit": commit,
                     "commit_short": commit_short
@@ -456,13 +309,14 @@ def create_initial_releases(releases):
                 release_data_patch.append(release_info)
                 logging.debug(f"Initial patch release '{release_info['name']}' created.")
 
-        if major not in latest_minor_versions or (minor is not None and minor > latest_minor_versions[major]['minor']):
+        if major not in latest_minor_versions or ((minor is not None and minor > latest_minor_versions[major]['minor']) and (micro is not None and micro > latest_minor_versions[major]['micro'])):
             latest_minor_versions[major] = {
                 'index': len(release_data_patch if release_type == "patch" else release_data_stable) - 1,
-                'minor': minor
+                'minor': minor,
+                'micro': micro
             }
 
-    return release_data_stable, release_data_patch, latest_minor_versions
+    return release_data_stable, release_data_patch, latest_minor_versions, latest_micro_versions
 
 def create_initial_nightly_releases(stable_releases):
     """Generate initial nightly releases from the earliest stable release."""
@@ -489,13 +343,13 @@ def create_initial_nightly_releases(stable_releases):
     date = start_date
 
     while date <= current_date:
-        major, minor = get_garden_version_for_date(release_type, date, [])
+        major, minor, micro = get_garden_version_for_date(release_type, date, [])
         commit, commit_short = get_git_commit_at_time(date.strftime('%Y-%m-%d'))
-        nightly_name = f"nightly-{major}.{minor}"
+        nightly_name = f"nightly-{major}.{minor}.{micro}"
         release_info = {
             "name": nightly_name,
             "type": "nightly",
-            "version": {"major": major, "minor": minor},
+            "version": {"major": major, "minor": minor, "micro": micro},
             "lifecycle": {
                 "released": {"isodate": date.strftime('%Y-%m-%d'), "timestamp": int(date.timestamp())}
             },
@@ -581,6 +435,7 @@ def create_single_release(release_type, args, existing_releases):
     if args.create == 'next':
         major = 'next'
         minor = None
+        micro = None
     elif args.version and args.create == 'stable':
         # For 'stable' releases, version should not contain '.'
         if '.' in args.version:
@@ -589,21 +444,32 @@ def create_single_release(release_type, args, existing_releases):
         try:
             major = int(args.version)
             minor = None
+            micro = None
         except ValueError:
             logging.error("Error: Invalid --version format. Major version must be an integer.")
             sys.exit(ERROR_CODES["validation_error"])
     elif args.version and args.create != 'stable':
-        # For other releases, version should be 'major.minor'
         try:
-            major, minor = map(int, args.version.split('.'))
-        except ValueError:
-            logging.error("Error: Invalid --version format. Use format: major.minor")
+            is_valid, error_message = validate_input_version_format(args.version, args.create)
+            if not is_valid:
+                logging.error(f"Error: {error_message}")
+                sys.exit(ERROR_CODES["validation_error"])
+
+            version_parts = args.version.split('.')
+            major, minor = map(int, version_parts[:2])
+            if len(version_parts) == 2:
+                micro = 0
+            else:
+                micro = int(version_parts[2])
+
+        except ValueError as e:
+            logging.error(f"Error: Invalid --version format. Use format: major.minor (for versions < 2000.0.0) or major.minor.micro (for versions >= 2000.0.0)")
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        major, minor = get_garden_version_for_date(release_type, release_date, existing_releases)
+        major, minor, micro = get_garden_version_for_date(release_type, release_date, existing_releases)
 
     # Create version object
-    version = {'major': major, 'minor': minor}
+    version = {'major': major, 'minor': minor, 'micro': micro}
 
     # First try to get flavors from flavors.yaml
     flavors = parse_flavors_commit(commit, version=version, query_s3=False, logger=logging.getLogger())
@@ -643,8 +509,18 @@ def create_single_release(release_type, args, existing_releases):
     release['lifecycle']['released']['timestamp'] = lifecycle_released_timestamp
 
     if release_type in ['dev', 'nightly']:
-        release['name'] = f"{release_type}-{major}.{minor}"
-        release['version']['minor'] = minor
+        # Create name and version based on schema version
+        if major >= 2000:
+            # v2 schema: include micro version
+            release['name'] = f"{release_type}-{major}.{minor}.{micro}"
+            release['version']['minor'] = minor
+            release['version']['micro'] = micro
+        else:
+            # v1 schema: exclude micro version
+            release['name'] = f"{release_type}-{major}.{minor}"
+            release['version']['minor'] = minor
+            # Don't set micro for v1 schema releases
+
         release['git'] = {}
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
@@ -668,8 +544,20 @@ def create_single_release(release_type, args, existing_releases):
         release['lifecycle']['eol']['isodate'] = lifecycle_eol_isodate
         release['lifecycle']['eol']['timestamp'] = lifecycle_eol_timestamp
     elif release_type == "patch":
-        release['name'] = f"{release_type}-{major}.{minor}"
-        release['version']['minor'] = minor
+        # Create name and version based on schema version
+        if major >= 2000:
+            # v2 schema: include micro version
+            release['name'] = f"{release_type}-{major}.{minor}.{micro}"
+            release['version']['minor'] = minor
+            release['version']['micro'] = micro
+            github_version = f"{major}.{minor}.{micro}"
+        else:
+            # v1 schema: exclude micro version
+            release['name'] = f"{release_type}-{major}.{minor}"
+            release['version']['minor'] = minor
+            # Don't set micro for v1 schema releases
+            github_version = f"{major}.{minor}"
+
         release['lifecycle']['eol'] = {}
         release['lifecycle']['eol']['isodate'] = lifecycle_eol_isodate
         release['lifecycle']['eol']['timestamp'] = lifecycle_eol_timestamp
@@ -677,7 +565,7 @@ def create_single_release(release_type, args, existing_releases):
         release['git']['commit'] = commit
         release['git']['commit_short'] = commit_short
         release['github'] = {}
-        release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{major}.{minor}"
+        release['github']['release'] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{github_version}"
         release['flavors'] = flavors
         release['attributes'] = {}
         release['attributes']['source_repo'] = True
@@ -687,7 +575,7 @@ def create_single_release(release_type, args, existing_releases):
 
 def delete_release(args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases):
     """Delete a release by name from the appropriate release list."""
-    release_type, major, minor = parse_release_name(args.delete)
+    release_type, major, minor, micro = parse_release_name(args.delete)
 
     # Select the appropriate list based on release_type
     if release_type == 'next':
@@ -738,6 +626,7 @@ def set_latest_minor_eol_to_major(stable_releases, patch_releases):
     for release in patch_releases:
         major = release['version']['major']
         minor = release.get('version', {}).get('minor')
+        micro = release.get('version', {}).get('micro')
         releases_by_major.setdefault(major, []).append(release)
 
     # For each major version, sort the minor releases and set the EOL
@@ -812,11 +701,11 @@ def load_input_stdin():
         sys.exit(ERROR_CODES["input_parameter_error"])
 
 def parse_release_name(release_name):
-    """Parse the release name in the format 'type-major.minor' or 'type-major'."""
+    """Parse the release name in the format 'type-major.minor.micro' or 'type-major.minor' or 'type-major'."""
     valid_types = ['next', 'stable', 'patch', 'nightly', 'dev']
     type_and_version = release_name.split('-', 1)
     if len(type_and_version) != 2:
-        logging.error("Error: Invalid release name format. Expected 'type-major.minor' or 'type-major'")
+        logging.error("Error: Invalid release name format. Expected 'type-major.minor.micro' or 'type-major.minor' or 'type-major'")
         sys.exit(ERROR_CODES["validation_error"])
     release_type = type_and_version[0]
     if release_type not in valid_types:
@@ -825,23 +714,29 @@ def parse_release_name(release_name):
     version = type_and_version[1]
     version_parts = version.split('.')
     try:
-        if len(version_parts) == 2:
+        if len(version_parts) == 3:
             major = int(version_parts[0])
             minor = int(version_parts[1])
+            micro = int(version_parts[2])
+        elif len(version_parts) == 2:
+            major = int(version_parts[0])
+            minor = int(version_parts[1])
+            micro = None
         elif len(version_parts) == 1:
             major = int(version_parts[0])
             minor = None
+            micro = None
         else:
             logging.error("Error: Invalid version format in release name.")
             sys.exit(ERROR_CODES["validation_error"])
     except ValueError:
-        logging.error("Error: Major and minor versions must be integers.")
+        logging.error("Error: Major, minor and micro versions must be integers.")
         sys.exit(ERROR_CODES["validation_error"])
-    return release_type, major, minor
+    return release_type, major, minor, micro
 
 def validate_release_data(release, errors):
     """Validate release data using the appropriate JSON schema."""
-    schema = SCHEMAS.get(release['type'])
+    schema = get_schema_for_release(release)
     if not schema:
         error_message = f"Unknown release type: {release['type']}"
         logging.error(error_message)
@@ -1167,7 +1062,7 @@ def handle_releases(args):
     else:
         if create_initial_stable or create_initial_patch:
             github_releases = get_github_releases()
-            stable_releases, patch_releases, latest_minor_versions = create_initial_releases(github_releases)
+            stable_releases, patch_releases, latest_minor_versions, latest_micro_versions = create_initial_releases(github_releases)
 
         # Add stdin input or file input data if provided (existing releases will be overwritten)
         if args.input_stdin or args.input:
@@ -1310,10 +1205,10 @@ def parse_arguments():
                       default=DEFAULTS['GLRD_S3_BUCKET_PREFIX'],
                       help="Prefix for S3 bucket objects. Defaults to empty string.")
 
-    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor). Requires --s3-update.")
+    parser.add_argument('--delete', type=str, help="Delete a release by name (format: type-major.minor or type-major.minor.micro). Requires --s3-update.")
     parser.add_argument('--create-initial-releases', type=str, help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.")
     parser.add_argument('--create', type=str, help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.")
-    parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor).")
+    parser.add_argument('--version', type=str, help="Manually specify the version (format: major.minor for versions < 2000.0.0, or major.minor.micro for versions >= 2000.0.0).")
     parser.add_argument('--commit', type=str, help="Manually specify the git commit hash (40 characters).")
     parser.add_argument('--lifecycle-released-isodatetime', type=str, help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument('--lifecycle-extended-isodatetime', type=str, help="Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).")

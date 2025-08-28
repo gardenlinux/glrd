@@ -44,7 +44,13 @@ def parse_arguments():
                       help="Prefix for S3 bucket objects")
 
     parser.add_argument('--version', type=str,
-                      help="Only process releases with this version (format: major.minor)")
+                      help="Only process releases with this version (format: major.minor.micro)")
+
+    parser.add_argument('--fix-micro-versions', action='store_true', default=True,
+                      help="Fix missing micro version fields in release names and version objects (default: True)")
+
+    parser.add_argument('--no-fix-micro-versions', action='store_true',
+                      help="Disable fixing of missing micro version fields")
 
     parser.add_argument('-V', action='version', version=f'%(prog)s {get_version()}')
 
@@ -57,13 +63,18 @@ def parse_arguments():
     if args.version:
         try:
             parts = args.version.split('.')
-            if len(parts) != 2:
-                raise ValueError("Version must be in format major.minor")
+            if len(parts) != 3:
+                raise ValueError("Version must be in format major.minor.micro")
             args.version_major = int(parts[0])
             args.version_minor = int(parts[1])
+            args.version_micro = int(parts[2])
         except (ValueError, IndexError) as e:
             logging.error(f"Invalid version format: {e}")
             sys.exit(ERROR_CODES["parameter_missing"])
+
+    # Handle micro version fixing flags
+    if args.no_fix_micro_versions:
+        args.fix_micro_versions = False
 
     return args
 
@@ -159,11 +170,60 @@ def update_source_repo_attribute(releases):
     for release in releases:
         major = int(release['version'].get('major', 0))
         minor = int(release['version'].get('minor', 0))
+        micro = int(release['version'].get('micro', 0))
 
-        if (major > 1592) or (major == 1592 and minor >= 4):
+        if (major > 1592) or (major == 1592 and minor >= 4 and micro >= 0):
             release['attributes'] = {'source_repo': True}
         else:
             release['attributes'] = {'source_repo': False}
+
+def fix_micro_version_fields(releases):
+    """Fix missing micro version fields in releases based on versioned schemas."""
+    fixed_count = 0
+
+    for release in releases:
+        release_type = release.get('type')
+        version = release.get('version', {})
+
+        # Only fix patch, nightly, and dev releases
+        if release_type in ['patch', 'nightly', 'dev']:
+            major = version.get('major')
+            minor = version.get('minor')
+            micro = version.get('micro')
+
+            # Only add micro field for versions >= 2000.0.0 (v2 schema)
+            if major is not None and major >= 2000:
+                # If micro is missing, set it to 0
+                if micro is None:
+                    version['micro'] = 0
+                    micro = 0
+                    fixed_count += 1
+
+                # Fix the name if it's missing the micro version
+                current_name = release.get('name', '')
+                expected_name = f"{release_type}-{major}.{minor}.{micro}"
+
+                if current_name != expected_name:
+                    release['name'] = expected_name
+                    fixed_count += 1
+                    logging.debug(f"Fixed name: {current_name} -> {expected_name}")
+            else:
+                # For versions < 2000.0.0 (v1 schema), ensure micro field is NOT present
+                if 'micro' in version:
+                    del version['micro']
+                    fixed_count += 1
+                    logging.debug(f"Removed micro field for v1 schema release: {release.get('name', '')}")
+
+                # Ensure name doesn't have micro version for v1 schema
+                current_name = release.get('name', '')
+                expected_name = f"{release_type}-{major}.{minor}"
+
+                if current_name != expected_name:
+                    release['name'] = expected_name
+                    fixed_count += 1
+                    logging.debug(f"Fixed name for v1 schema: {current_name} -> {expected_name}")
+
+    return fixed_count
 
 def process_releases(args):
     """Process all release files."""
@@ -200,6 +260,7 @@ def process_releases(args):
     successful_files = []
     total_releases_processed = 0
     total_releases_updated = 0
+    total_micro_fixes = 0
 
     for json_file in json_files:
         try:
@@ -210,8 +271,16 @@ def process_releases(args):
                     releases = releases['releases']
                 logging.info(f"Found {len(releases)} releases in {json_file}")
 
+            # Fix micro version fields first (if enabled)
+            micro_fixes = 0
+            if args.fix_micro_versions:
+                micro_fixes = fix_micro_version_fields(releases)
+                if micro_fixes > 0:
+                    logging.info(f"Fixed {micro_fixes} micro version fields in {json_file}")
+                    total_micro_fixes += micro_fixes
+
             # Process each release
-            modified = False
+            modified = (micro_fixes > 0)  # File is modified if micro versions were fixed
             releases_processed = 0
             releases_updated = 0
 
@@ -228,12 +297,13 @@ def process_releases(args):
                     continue
 
                 version = release.get('version', {})
-                version_info = f"{version.get('major', '?')}.{version.get('minor', '?')}"
+                version_info = f"{version.get('major', '?')}.{version.get('minor', '?')}.{version.get('micro', '?')}"
 
                 # Skip if version filter is active and doesn't match
                 if args.version:
                     if (version.get('major') != args.version_major or
-                        version.get('minor') != args.version_minor):
+                        version.get('minor') != args.version_minor or
+                        version.get('micro') != args.version_micro):
                         logging.debug(f"Skipping {release_type} release {release_name}: version {version_info} doesn't match filter {args.version}")
                         continue
 
@@ -290,6 +360,7 @@ def process_releases(args):
     logging.info(f"Files processed successfully: {len(successful_files)} out of {len(json_files)}")
     logging.info(f"Total releases processed: {total_releases_processed}")
     logging.info(f"Total releases updated with flavors: {total_releases_updated}")
+    logging.info(f"Total micro version fields fixed: {total_micro_fixes}")
 
 def main():
     args = parse_arguments()

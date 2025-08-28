@@ -31,10 +31,30 @@ DEFAULTS = dict(DEFAULTS, **{
 })
 
 def get_version_string(version, release_type=None):
-    """Return a version string from a version object. Show major only for stable and next releases."""
+    """
+    Return a version string from a version object, respecting versioned schemas.
+
+    Args:
+        version: Version object containing major, minor, and optionally micro fields
+        release_type: Type of release (stable, patch, nightly, dev, next)
+
+    Returns:
+        Formatted version string appropriate for the release type and version
+    """
     if release_type in ['stable', 'next']:
         return str(version['major'])  # Stable releases show only major version
-    return f"{version['major']}.{version.get('minor', 0)}"
+
+    # For patch, nightly, and dev releases, determine format based on version number
+    major = version.get('major', 0)
+    minor = version.get('minor', 0)
+    micro = version.get('micro', 0)
+
+    # Use v2 schema format (with micro) for versions >= 2000.0.0
+    if major >= 2000:
+        return f"{major}.{minor}.{micro}"
+    else:
+        # Use v1 schema format (without micro) for versions < 2000.0.0
+        return f"{major}.{minor}"
 
 def is_active_release(release, current_timestamp):
     """Check if the release is still active based on its EOL timestamp."""
@@ -57,23 +77,61 @@ def filter_archived_releases(releases):
     return [release for release in releases if is_archived_release(release, current_timestamp)]
 
 def filter_releases(releases, release_types=None, version=None):
-    """Filter releases by type and/or version."""
+    """
+    Filter releases by type and/or version, respecting versioned schemas.
+
+    Args:
+        releases: List of release objects to filter
+        release_types: Comma-separated string of release types to include
+        version: Version string in format major.minor.micro (micro is optional)
+
+    Returns:
+        Filtered list of releases
+    """
     if version:
         version_parts = version.split('.')
         major = int(version_parts[0])
         minor = int(version_parts[1]) if len(version_parts) > 1 else None
+        micro = int(version_parts[2]) if len(version_parts) > 2 else None
+
         releases = [
             r for r in releases
-            if r['version']['major'] == major and (minor is None or r['version'].get('minor', 0) == minor)
+            if r['version']['major'] == major and
+               (minor is None or r['version'].get('minor', 0) == minor) and
+               (micro is None or r['version'].get('micro', 0) == micro)
         ]
+
     if release_types:
         release_types = release_types.split(',')
         releases = [r for r in releases if r.get('type') in release_types]
+
     return releases
 
 def find_latest_release(releases):
-    """Find the latest release by version."""
-    return max(releases, key=lambda r: (r['version']['major'], r['version'].get('minor', 0)), default=None)
+    """
+    Find the latest release by version, respecting versioned schemas.
+
+    Args:
+        releases: List of release objects to search
+
+    Returns:
+        The latest release object or None if no releases found
+    """
+    def get_version_key(release):
+        """Get version key for comparison, respecting versioned schemas."""
+        version = release['version']
+        major = version['major']
+        minor = version.get('minor', 0)
+        micro = version.get('micro', 0)
+
+        # For versions >= 2000.0.0, include micro in comparison
+        if major >= 2000:
+            return (major, minor, micro)
+        else:
+            # For versions < 2000.0.0, exclude micro from comparison
+            return (major, minor, 0)
+
+    return max(releases, key=get_version_key, default=None)
 
 def get_extended_maintenance(release):
     """Return the extended maintenance date for a release, if available."""
@@ -232,7 +290,15 @@ def format_output(args, releases, output_format, fields=None, no_header=False):
         print(formatted_output)
 
 def sort_releases(releases):
-    """Sort releases by major and minor version, handling non-integer majors like 'next'."""
+    """
+    Sort releases by version, respecting versioned schemas.
+
+    Args:
+        releases: List of release objects to sort
+
+    Returns:
+        Sorted list of releases
+    """
     def parse_version_part(part):
         if isinstance(part, int):
             return part
@@ -247,9 +313,18 @@ def sort_releases(releases):
             return -1  # Default value for unexpected types
 
     def sort_key(r):
-        major = parse_version_part(r['version'].get('major'))
-        minor = parse_version_part(r['version'].get('minor', -1))
-        return (major, minor)
+        """Get sort key for a release, respecting versioned schemas."""
+        version = r['version']
+        major = parse_version_part(version.get('major'))
+        minor = parse_version_part(version.get('minor', -1))
+        micro = parse_version_part(version.get('micro', -1))
+
+        # For versions >= 2000.0.0, include micro in sorting
+        if isinstance(major, int) and major >= 2000:
+            return (major, minor, micro)
+        else:
+            # For versions < 2000.0.0 or non-integer majors (like 'next'), exclude micro from sorting
+            return (major, minor, 0)
 
     return sorted(releases, key=sort_key)
 
@@ -358,14 +433,14 @@ def parse_arguments():
                        help="Show only archived releases.")
 
     parser.add_argument('--latest', action='store_true',
-                       help="Show the latest active major.minor release.")
+                       help="Show the latest active major.minor.micro release.")
 
     parser.add_argument('--type', type=str,
                        default=DEFAULTS['QUERY_TYPE'],
                        help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next")
 
     parser.add_argument('--version', type=str,
-                       help="Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0")
+                       help="Filter by a specific version (major or major.minor.micro). E.g., --version 1312 or --version 1312.0 or --version 1312.0.0")
 
     parser.add_argument('--fields', type=str,
                        help=("Comma-separated list of fields to output. Possible fields: " +
@@ -427,7 +502,8 @@ def format_flavors_with_urls(release):
         return {}
 
     try:
-        version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
+        # Get version string respecting versioned schemas
+        version = get_version_string(release['version'], release.get('type'))
         commit_short = release['git'].get('commit_short', '')
 
         regular_flavors = {}
@@ -458,10 +534,8 @@ def format_flavors_with_urls(release):
 def get_oci_url(release):
     """Return the OCI image URL for a release."""
     try:
-        if release['type'] in ['stable', 'next']:
-            version = str(release['version']['major'])
-        else:
-            version = f"{release['version']['major']}.{release['version'].get('minor', 0)}"
+        # Get version string respecting versioned schemas
+        version = get_version_string(release['version'], release.get('type'))
         return f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
     except Exception as e:
         logging.error(f"Error getting OCI URL: {e}")

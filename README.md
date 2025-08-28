@@ -58,6 +58,7 @@ git clone https://github.com/gardenlinux/glrd.git
 cd glrd
 poetry install
 ```
+
 </details>
 
 ### Run in container
@@ -171,7 +172,7 @@ options:
   --archived            Show only archived releases.
   --latest              Show the latest active major.minor release.
   --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next
-  --version VERSION     Filter by a specific version (major or major.minor). E.g., --version 1312 or --version 1312.0
+  --version VERSION     Filter by a specific version (major, major.minor, or major.minor.micro). E.g., --version 1312, --version 1312.0, or --version 2000.0.0
   --fields FIELDS       Comma-separated list of fields to output. Possible fields: Name,Version,Type,GitCommit,GitCommitShort,ReleaseDate,ReleaseTime,ExtendedMaintenance,EndOfMaintenance,Flavors,OCI,AttributesSourceRepo (default: Name,Version,Type,GitCommitShort,ReleaseDate,ExtendedMaintenance,EndOfMaintenance)
   --no-header           Omit the header in shell output.
   -V                    show program's version number and exit
@@ -210,6 +211,7 @@ patch-1592.6     1592.6  patch   cb05e11f          2025-02-19     N/A           
       "version": {
         "major": 1592,
         "minor": 6
+        // Note: micro field is only present for versions ≥ 2000.0.0
       },
       "lifecycle": {
         "released": {
@@ -398,22 +400,26 @@ patch-1592.6     1592.6  patch   cb05e11f          2025-02-19     N/A           
   ]
 }
 ```
+
 </details>
 
 #### Get json output and filter for version
+
 ```
 ❯ glrd --latest --output-format json | jq -r '.releases[] | "\(.version.major).\(.version.minor)"'
 1592.6
 ```
 
+**Note**: For versions ≥ 2000.0.0, you can also filter by micro version: `jq -r '.releases[] | "\(.version.major).\(.version.minor).\(.version.micro)"'`
+
 ### Get all active and supported Garden Linux Versions
 
 ```
 ❯ glrd --active
-Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance  
-stable-1443         	1443                	stable              	N/A                 	2024-03-13          	2024-09-13          	2025-01-13          
-patch-1443.15       	1443.15             	patch               	5d33a69             	2024-10-10          	N/A                 	2025-01-13          
-stable-1592         	1592                	stable              	N/A                 	2024-08-12          	2025-05-12          	2025-08-12          
+Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance
+stable-1443         	1443                	stable              	N/A                 	2024-03-13          	2024-09-13          	2025-01-13
+patch-1443.15       	1443.15             	patch               	5d33a69             	2024-10-10          	N/A                 	2025-01-13
+stable-1592         	1592                	stable              	N/A                 	2024-08-12          	2025-05-12          	2025-08-12
 patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12
 ```
 
@@ -441,7 +447,7 @@ gantt
         Standard maintenance:       task, 2024-12-01, 6M
         Extended maintenance:       milestone, 2025-06-01, 0m
         Extended maintenance:       task, 2025-06-01, 3M
-        End of maintenance:         milestone, 2025-09-01, 0m        
+        End of maintenance:         milestone, 2025-09-01, 0m
 ```
 
 ## glrd-manage
@@ -477,7 +483,7 @@ options:
   --create-initial-releases CREATE_INITIAL_RELEASES
                         Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.
   --create CREATE       Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.
-  --version VERSION     Manually specify the version (format: major.minor).
+  --version VERSION     Manually specify the version (format: major.minor for versions < 2000.0.0, major.minor.micro for versions ≥ 2000.0.0).
   --commit COMMIT       Manually specify the git commit hash (40 characters).
   --lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME
                         Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
@@ -629,6 +635,13 @@ Without any additional parameters, the current timestamp and git information wil
 
 The Garden Linux Release Database (GLRD) uses structured JSON schemas to represent different types of releases: **stable**, **patch**, **nightly**, and **development** releases. Each release type has specific fields that capture essential information about the release.
 
+### Versioning Scheme
+
+Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gardenlinux/issues/3069) in [TODO!!! name commit !!!]. GLRD supports both versioning schemes based on the major version number:
+
+- **v1: Versions < 2000.0.0**: Use the `major.minor` format (e.g., `27.0`, `1592.6`)
+- **v2: Versions ≥ 2000.0.0**: Use the `major.minor.micro` format (e.g., `2000.0.0`, `2222.1.5`)
+
 ### Stable Releases
 
 [Stable releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#stable-releases) are major releases that are supported over an extended period of time.
@@ -656,11 +669,12 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `patch-1312.1`).
+- **`name`**: A string representing the release name (e.g., `patch-1312.1` for v1 versions, `patch-2000.0.0` for v2 versions).
 - **`type`**: `patch`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number (e.g. `1312`).
   - **`minor`**: An integer indicating the minor version number (e.g. `1`).
+  - **`micro`**: An integer indicating the micro version number (only present for versions ≥ 2000.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -683,11 +697,12 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `nightly-1312.0`).
+- **`name`**: A string representing the release name (e.g., `nightly-1312.0` for v1 versions, `nightly-2000.0.0` for v2 versions).
 - **`type`**: `nightly`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number.
   - **`minor`**: An integer indicating the minor version number.
+  - **`micro`**: An integer indicating the micro version number (only present for versions ≥ 2000.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -705,11 +720,12 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `dev-1312.0`).
+- **`name`**: A string representing the release name (e.g., `dev-1312.0` for v1 versions, `dev-2000.0.0` for v2 versions).
 - **`type`**: `dev`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number.
   - **`minor`**: An integer indicating the minor version number.
+  - **`micro`**: An integer indicating the micro version number (only present for versions ≥ 2000.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.

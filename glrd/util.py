@@ -80,10 +80,10 @@ def get_version():
     return importlib.metadata.version('glrd')
 
 def extract_version_data(tag_name):
-    """Extract major and minor version numbers from a tag."""
-    version_regex = re.compile(r'^(\d+)\.?(\d+)?$')
+    """Extract major, minor and micro version numbers from a tag."""
+    version_regex = re.compile(r'^(\d+)\.?(\d+)?\.?(\d+)?$')
     match = version_regex.match(tag_name)
-    return (int(match.group(1)), int(match.group(2))) if match else (None, None)
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3))) if match else (None, None, None)
 
 def get_current_timestamp():
     """Get current timestamp."""
