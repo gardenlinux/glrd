@@ -11,7 +11,7 @@ readme = "README.md"
 packages = [{include = "glrd"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.13"
 poetry-dynamic-versioning = "*"
 boto3 = "*"
 deepdiff = "*"
@@ -21,7 +21,14 @@ pytz = "*"
 python-dateutil = "*"
 requests = "*"
 tabulate = "*"
-python-gardenlinux-lib = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", branch = "main" }
+python-gardenlinux-lib = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", branch = "0.6.0" }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pytest-cov = "*"
+black = "*"
+flake8 = "*"
+
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -43,3 +50,19 @@ glrd = "glrd.query:main"
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings",
+]
+markers = [
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
