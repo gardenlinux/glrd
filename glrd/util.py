@@ -39,8 +39,8 @@ DEFAULTS = {
     'QUERY_OUTPUT_DESCRIPTION': 'Garden Linux Releases',
 
     # Manage defaults
-    'MANAGE_INPUT_FILE': 'releases-input.yaml',
-    'MANAGE_OUTPUT_FORMAT': 'yaml',
+    'MANAGE_INPUT_FILE': 'releases-input.json',
+    'MANAGE_OUTPUT_FORMAT': 'json',
     'MANAGE_OUTPUT_FILE_PREFIX': 'releases',
 
     # S3 configuration for glrd storage
