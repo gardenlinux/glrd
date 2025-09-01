@@ -28,7 +28,7 @@ pytest = "*"
 pytest-cov = "*"
 black = "*"
 flake8 = "*"
-
+autopep8 = "*"
 
 [tool.poetry-dynamic-versioning]
 enable = true

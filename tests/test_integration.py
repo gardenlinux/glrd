@@ -13,7 +13,6 @@ import json
 import subprocess
 import sys
 import pytest
-from pathlib import Path
 
 
 @pytest.mark.integration
@@ -24,7 +23,10 @@ class TestGLRDIntegration:
         """Run glrd-manage command and return result."""
         cmd = [sys.executable, manage_script] + args
         result = subprocess.run(
-            cmd, capture_output=True, text=True, cwd=os.path.dirname(manage_script)
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(manage_script),
         )
 
         if expect_success:
@@ -72,7 +74,10 @@ class TestGLRDIntegration:
         """Run glrd query command and return result."""
         cmd = [sys.executable, query_script] + args
         result = subprocess.run(
-            cmd, capture_output=True, text=True, cwd=os.path.dirname(query_script)
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(query_script),
         )
 
         assert result.returncode == 0, (
@@ -104,7 +109,7 @@ class TestGLRDIntegration:
         output_file = f"{prefix}-nightly.json"
 
         # Create release
-        result = self.run_manage_command(
+        _ = self.run_manage_command(
             manage_script,
             [
                 "--create",
@@ -192,7 +197,7 @@ class TestGLRDIntegration:
         output_file = f"{prefix}-nightly.json"
 
         # Create release
-        result = self.run_manage_command(
+        _ = self.run_manage_command(
             manage_script,
             [
                 "--create",
@@ -417,8 +422,14 @@ class TestGLRDIntegration:
                     "type": "patch",
                     "version": {"major": 1592, "minor": 6},
                     "lifecycle": {
-                        "released": {"isodate": "2025-02-19", "timestamp": 1739951325},
-                        "eol": {"isodate": "2025-08-12", "timestamp": 1754956800},
+                        "released": {
+                            "isodate": "2025-02-19",
+                            "timestamp": 1739951325,
+                        },
+                        "eol": {
+                            "isodate": "2025-08-12",
+                            "timestamp": 1754956800,
+                        },
                     },
                     "git": {
                         "commit": "cb05e11f0481b72d0a30da3662295315b220a436",
@@ -485,9 +496,18 @@ class TestGLRDIntegration:
                     "type": "next",
                     "version": {"major": "next"},
                     "lifecycle": {
-                        "released": {"isodate": "2025-12-01", "timestamp": 1764547200},
-                        "extended": {"isodate": "2026-06-01", "timestamp": 1780262400},
-                        "eol": {"isodate": "2026-09-01", "timestamp": 1788297600},
+                        "released": {
+                            "isodate": "2025-12-01",
+                            "timestamp": 1764547200,
+                        },
+                        "extended": {
+                            "isodate": "2026-06-01",
+                            "timestamp": 1780262400,
+                        },
+                        "eol": {
+                            "isodate": "2026-09-01",
+                            "timestamp": 1788297600,
+                        },
                     },
                 }
             ]

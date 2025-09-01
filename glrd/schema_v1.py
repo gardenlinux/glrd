@@ -21,7 +21,10 @@ SCHEMA_V1 = {
                     "released": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": "string", "format": "date"},
+                            "isodate": {
+                                "type": "string",
+                                "format": "date",
+                            },
                             "timestamp": {"type": "integer"},
                         },
                         "required": ["isodate", "timestamp"],
@@ -29,14 +32,20 @@ SCHEMA_V1 = {
                     "extended": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
+                            "isodate": {
+                                "type": ["string"],
+                                "format": "date",
+                            },
                             "timestamp": {"type": ["integer"]},
                         },
                     },
                     "eol": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
+                            "isodate": {
+                                "type": ["string"],
+                                "format": "date",
+                            },
                             "timestamp": {"type": ["integer"]},
                         },
                     },
@@ -62,7 +71,10 @@ SCHEMA_V1 = {
                     "released": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": "string", "format": "date"},
+                            "isodate": {
+                                "type": "string",
+                                "format": "date",
+                            },
                             "timestamp": {"type": "integer"},
                         },
                         "required": ["isodate", "timestamp"],
@@ -70,14 +82,20 @@ SCHEMA_V1 = {
                     "extended": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
+                            "isodate": {
+                                "type": ["string"],
+                                "format": "date",
+                            },
                             "timestamp": {"type": ["integer"]},
                         },
                     },
                     "eol": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
+                            "isodate": {
+                                "type": ["string"],
+                                "format": "date",
+                            },
                             "timestamp": {"type": ["integer"]},
                         },
                     },
@@ -106,7 +124,10 @@ SCHEMA_V1 = {
                     "released": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": "string", "format": "date"},
+                            "isodate": {
+                                "type": "string",
+                                "format": "date",
+                            },
                             "timestamp": {"type": "integer"},
                         },
                         "required": ["isodate", "timestamp"],
@@ -114,7 +135,10 @@ SCHEMA_V1 = {
                     "eol": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": ["string"], "format": "date"},
+                            "isodate": {
+                                "type": ["string"],
+                                "format": "date",
+                            },
                             "timestamp": {"type": ["integer"]},
                         },
                     },
@@ -124,8 +148,14 @@ SCHEMA_V1 = {
             "git": {
                 "type": "object",
                 "properties": {
-                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
+                    "commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$",
+                    },
+                    "commit_short": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{7,8}$",
+                    },
                 },
                 "required": ["commit", "commit_short"],
             },
@@ -141,7 +171,14 @@ SCHEMA_V1 = {
                 "required": ["source_repo"],
             },
         },
-        "required": ["name", "type", "version", "lifecycle", "git", "github"],
+        "required": [
+            "name",
+            "type",
+            "version",
+            "lifecycle",
+            "git",
+            "github",
+        ],
     },
     "nightly": {
         "type": "object",
@@ -162,7 +199,10 @@ SCHEMA_V1 = {
                     "released": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": "string", "format": "date"},
+                            "isodate": {
+                                "type": "string",
+                                "format": "date",
+                            },
                             "timestamp": {"type": "integer"},
                         },
                         "required": ["isodate", "timestamp"],
@@ -173,8 +213,14 @@ SCHEMA_V1 = {
             "git": {
                 "type": "object",
                 "properties": {
-                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
+                    "commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$",
+                    },
+                    "commit_short": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{7,8}$",
+                    },
                 },
                 "required": ["commit", "commit_short"],
             },
@@ -206,7 +252,10 @@ SCHEMA_V1 = {
                     "released": {
                         "type": "object",
                         "properties": {
-                            "isodate": {"type": "string", "format": "date"},
+                            "isodate": {
+                                "type": "string",
+                                "format": "date",
+                            },
                             "timestamp": {"type": "integer"},
                         },
                         "required": ["isodate", "timestamp"],
@@ -217,8 +266,14 @@ SCHEMA_V1 = {
             "git": {
                 "type": "object",
                 "properties": {
-                    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
+                    "commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$",
+                    },
+                    "commit_short": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{7,8}$",
+                    },
                 },
                 "required": ["commit", "commit_short"],
             },

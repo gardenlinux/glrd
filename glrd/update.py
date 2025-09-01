@@ -7,10 +7,10 @@ import sys
 import boto3
 
 from glrd.manage import download_all_s3_files, upload_all_local_files
-from glrd.util import *
+from glrd.util import DEFAULTS, ERROR_CODES, get_version
 
-from python_gardenlinux_lib.flavors.parse_flavors import *
-from python_gardenlinux_lib.s3.s3 import *
+from python_gardenlinux_lib.flavors.parse_flavors import parse_flavors_commit
+from python_gardenlinux_lib.s3.s3 import get_s3_artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +30,15 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "--s3-download", action="store_true", help="Download files from S3 first"
+        "--s3-download",
+        action="store_true",
+        help="Download files from S3 first",
     )
 
     parser.add_argument(
-        "--s3-update", action="store_true", help="Upload files to S3 after processing"
+        "--s3-update",
+        action="store_true",
+        help="Upload files to S3 after processing",
     )
 
     parser.add_argument(
@@ -68,7 +72,8 @@ def parse_arguments():
         "--fix-micro-versions",
         action="store_true",
         default=True,
-        help="Fix missing micro version fields in release names and version objects (default: True)",
+        help="Fix missing micro version fields in release names and version "
+        "objects (default: True)",
     )
 
     parser.add_argument(
@@ -120,7 +125,10 @@ def save_releases(releases, json_file):
     try:
         with open(json_file, "w") as file:
             json.dump(
-                {"releases": releases}, file, separators=(",", ":"), ensure_ascii=False
+                {"releases": releases},
+                file,
+                separators=(",", ":"),
+                ensure_ascii=False,
             )
     except Exception as e:
         logging.error(f"Error saving releases to {json_file}: {e}")
@@ -271,7 +279,8 @@ def process_releases(args):
         try:
             logging.info(f"Downloading files from S3 bucket {args.s3_bucket_name}")
             download_all_s3_files(
-                bucket_name=args.s3_bucket_name, bucket_prefix=args.s3_bucket_prefix
+                bucket_name=args.s3_bucket_name,
+                bucket_prefix=args.s3_bucket_prefix,
             )
             logging.info("Successfully downloaded files from S3")
         except Exception as e:
@@ -344,12 +353,17 @@ def process_releases(args):
                 # Only process patch, nightly, and dev releases
                 if release_type not in ["patch", "nightly", "dev"]:
                     logging.debug(
-                        f"Skipping {release_type} release {release_name}: not a patch/nightly/dev release"
+                        f"Skipping {release_type} release {release_name}: "
+                        f"not a patch/nightly/dev release"
                     )
                     continue
 
                 version = release.get("version", {})
-                version_info = f"{version.get('major', '?')}.{version.get('minor', '?')}.{version.get('micro', '?')}"
+                version_info = (
+                    f"{version.get('major', '?')}."
+                    f"{version.get('minor', '?')}."
+                    f"{version.get('micro', '?')}"
+                )
 
                 # Skip if version filter is active and doesn't match
                 if args.version:
@@ -359,7 +373,8 @@ def process_releases(args):
                         or version.get("micro") != args.version_micro
                     ):
                         logging.debug(
-                            f"Skipping {release_type} release {release_name}: version {version_info} doesn't match filter {args.version}"
+                            f"Skipping {release_type} release {release_name}: "
+                            f"version {version_info} doesn't match filter {args.version}"
                         )
                         continue
 
@@ -377,7 +392,8 @@ def process_releases(args):
                     continue
 
                 logging.info(
-                    f"Processing {release_type} release {release_name} (version {version_info}, commit {commit[:8]})"
+                    f"Processing {release_type} release {release_name} "
+                    f"(version {version_info}, commit {commit[:8]})"
                 )
 
                 # Update source repo attribute
@@ -385,7 +401,10 @@ def process_releases(args):
 
                 # Get flavors for this commit using artifacts data
                 flavors = parse_flavors_commit(
-                    commit, version=version, query_s3=True, s3_objects=artifacts_data
+                    commit,
+                    version=version,
+                    query_s3=True,
+                    s3_objects=artifacts_data,
                 )
                 if flavors:
                     release["flavors"] = flavors
@@ -393,11 +412,13 @@ def process_releases(args):
                     releases_updated += 1
                     total_releases_updated += 1
                     logging.info(
-                        f"Added {len(flavors)} flavors for {release_name} (version {version_info}, commit {commit[:8]})"
+                        f"Added {len(flavors)} flavors for {release_name} "
+                        f"(version {version_info}, commit {commit[:8]})"
                     )
                 else:
                     logging.info(
-                        f"No flavors found for {release_name} (version {version_info}, commit {commit[:8]})"
+                        f"No flavors found for {release_name} "
+                        f"(version {version_info}, commit {commit[:8]})"
                     )
 
             # Save if modified
@@ -406,7 +427,8 @@ def process_releases(args):
                     json.dump({"releases": releases}, f, indent=2)
                 successful_files.append(json_file)
                 logging.info(
-                    f"Updated {json_file} ({releases_updated}/{releases_processed} releases updated)"
+                    f"Updated {json_file} "
+                    f"({releases_updated}/{releases_processed} releases updated)"
                 )
             else:
                 logging.info(

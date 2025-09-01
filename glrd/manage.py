@@ -1,16 +1,12 @@
 import argparse
-import atexit
-import base64
 import fnmatch
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from datetime import datetime, timedelta
 
 import boto3
@@ -25,9 +21,19 @@ from glrd.schema_v1 import SCHEMA_V1
 from glrd.schema_v2 import SCHEMA_V2
 
 from glrd.query import load_all_releases
-from glrd.util import *
-from python_gardenlinux_lib.flavors.parse_flavors import *
-from python_gardenlinux_lib.s3.s3 import *
+from glrd.util import (
+    DEFAULTS,
+    ERROR_CODES,
+    extract_version_data,
+    isodate_to_timestamp,
+    timestamp_to_isodate,
+    get_version,
+    NoAliasDumper,
+)
+from python_gardenlinux_lib.flavors.parse_flavors import (
+    parse_flavors_commit,
+)
+from python_gardenlinux_lib.s3.s3 import get_s3_artifacts, get_s3_client
 
 # silence boto3 logging
 boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
@@ -56,7 +62,8 @@ def validate_input_version_format(version, release_type):
         if major >= 2000:
             return (
                 False,
-                f"Version {'.'.join(version_parts)} requires v2 schema but missing micro version. Use format: major.minor.micro",
+                f"Version {'.'.join(version_parts)} requires v2 schema "
+                f"but missing micro version. Use format: major.minor.micro",
             )
         return True, None
     elif len(version_parts) == 3:
@@ -65,13 +72,14 @@ def validate_input_version_format(version, release_type):
         if major < 2000:
             return (
                 False,
-                f"Version {'.'.join(version_parts)} uses v1 schema but includes micro version. Use format: major.minor",
+                f"Version {'.'.join(version_parts)} uses v1 schema but "
+                f"includes micro version. Use format: major.minor",
             )
         return True, None
     else:
         return (
             False,
-            f"Invalid version format. Expected major.minor or major.minor.micro",
+            "Invalid version format. Expected major.minor or " "major.minor.micro",
         )
 
 
@@ -88,15 +96,17 @@ def get_schema_for_release(release):
     release_type = release.get("type")
     version = release.get("version", {})
 
-    # For stable and next releases, always use v2 schema (they don't have major.minor.micro version numbers >= 2000)
+    # For stable and next releases, always use v2 schema
+    # (they don't have major.minor.micro version numbers >= 2000)
     if release_type in ["stable", "next"]:
         return SCHEMA_V2[release_type]
 
-    # For patch, nightly, and dev releases, determine schema version based on version number
+    # For patch, nightly, and dev releases, determine schema version based
+    # on version number
     if release_type in ["patch", "nightly", "dev"]:
         major = version.get("major", 0)
-        minor = version.get("minor", 0)
-        micro = version.get("micro", 0)
+        # minor = version.get("minor", 0)  # unused
+        # micro = version.get("micro", 0)  # unused
 
         # Use v2 schema (with micro field) for versions >= 2000.0.0
         if major >= 2000:
@@ -112,8 +122,9 @@ repo_clone_path = None
 
 
 def cleanup_temp_repo():
-    """Cleanup function to delete the temporary directory at the end of the script."""
-    global repo_clone_path
+    """Cleanup function to delete the temporary directory at the end of the
+    script."""
+    # global repo_clone_path  # unused
     if repo_clone_path and os.path.exists(repo_clone_path):
         shutil.rmtree(repo_clone_path)
 
@@ -128,7 +139,7 @@ def glrd_query_type(args, release_type):
         DEFAULTS["QUERY_INPUT_FORMAT"],
     )
     if not releases:
-        logging.error(f"Error retrieving releases: {result.stderr}")
+        logging.error("Error retrieving releases")
         sys.exit(ERROR_CODES["query_error"])
     return releases
 
@@ -139,7 +150,7 @@ def get_github_releases():
         "gh",
         "api",
         "--paginate",
-        f"/repos/{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}/releases",
+        f"/repos/{DEFAULTS['GL_REPO_OWNER']}/" f"{DEFAULTS['GL_REPO_NAME']}/releases",
     ]
     result = subprocess.run(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
@@ -159,7 +170,8 @@ def get_git_commit_from_tag(tag):
         command = [
             "gh",
             "api",
-            f"/repos/{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}/git/refs/tags/{tag}",
+            f"/repos/{DEFAULTS['GL_REPO_OWNER']}/"
+            f"{DEFAULTS['GL_REPO_NAME']}/git/refs/tags/{tag}",
             "--jq",
             ".object.sha",
         ]
@@ -172,7 +184,10 @@ def get_git_commit_from_tag(tag):
             sys.exit(ERROR_CODES["subprocess_output_missing"])
 
         commit = result.stdout.strip()
-        return commit, commit[:8]  # Return full commit and shortened version
+        return (
+            commit,
+            commit[:8],
+        )  # Return full commit and shortened version
     except Exception as e:
         logging.error(f"Error fetching git commit for tag {tag}: {e}")
         sys.exit(ERROR_CODES["subprocess_output_error"])
@@ -180,8 +195,9 @@ def get_git_commit_from_tag(tag):
 
 def ensure_isodate_and_timestamp(lifecycle):
     """
-    Ensure both isodate and timestamp are set for all lifecycle fields (released, extended, eol).
-    If only one is present, the other is computed.
+    Ensure both isodate and timestamp are set for all lifecycle fields
+    (released, extended, eol). If only one is present, the other is
+    computed.
     """
     for key in ["released", "extended", "eol"]:
         if key in lifecycle and lifecycle[key]:
@@ -199,16 +215,19 @@ def ensure_isodate_and_timestamp(lifecycle):
 def get_git_commit_at_time(
     date, time="06:00", branch="main", remote_repo=DEFAULTS["GL_REPO_URL"]
 ):
-    """Fetch the git commit that was at a specific date and time in the main branch, using a temporary cached git clone."""
+    """Fetch the git commit that was at a specific date and time in the
+    main branch, using a temporary cached git clone."""
     global repo_clone_path
 
-    # Convert the input date and time to the target timezone (UTC) and then to UTC
+    # Convert the input date and time to the target timezone (UTC) and
+    # then to UTC
     target_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").astimezone(
         pytz.timezone("UTC")
     )
     target_time_utc = target_time.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # If the repository hasn't been cloned yet, clone it to a dynamically created temp directory
+    # If the repository hasn't been cloned yet, clone it to a dynamically
+    # created temp directory
     if not repo_clone_path:
         # Create a temporary directory for cloning the repository
         temp_dir = tempfile.mkdtemp(prefix="glrd_temp_repo_")
@@ -225,7 +244,10 @@ def get_git_commit_at_time(
             temp_dir,
         ]
         clone_result = subprocess.run(
-            clone_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            clone_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
 
         if clone_result.returncode != 0:
@@ -307,22 +329,28 @@ def get_garden_version_for_date(release_type, date, existing_releases):
         minor = 0
         micro = 0
     else:
-        # Collect existing minor versions for the given major version and release type
+        # Collect existing minor versions for the given major version and
+        # release type
         existing_minor_versions = [
             release["version"].get("minor", -1)
             for release in existing_releases
-            if release["type"] == release_type and release["version"]["major"] == major
+            if (
+                release["type"] == release_type and release["version"]["major"] == major
+            )
         ]
         existing_micro_versions = [
             release["version"].get("micro", -1)
             for release in existing_releases
-            if release["type"] == release_type
-            and release["version"]["major"] == major
-            and release["version"]["minor"] == minor
+            if (
+                release["type"] == release_type
+                and release["version"]["major"] == major
+                and release["version"]["minor"] == minor
+            )
         ]
 
         logging.debug(
-            f"Existing micro versions for major {major} and minor {minor}: {existing_micro_versions}"
+            f"Existing micro versions for major {major} and minor "
+            f"{minor}: {existing_micro_versions}"
         )
 
         if existing_minor_versions:
@@ -335,7 +363,9 @@ def get_garden_version_for_date(release_type, date, existing_releases):
         else:
             micro = 0
 
-    logging.debug(f"New {release_type} version for {date} is {major}.{minor}.{micro}")
+    logging.debug(
+        f"New {release_type} version for {date} is " f"{major}.{minor}.{micro}"
+    )
 
     return major, minor, micro
 
@@ -379,7 +409,10 @@ def create_initial_releases(releases):
                 commit, commit_short = get_git_commit_from_tag(tag_name)
                 release_info["version"]["minor"] = minor
                 release_info["version"]["micro"] = micro
-                release_info["git"] = {"commit": commit, "commit_short": commit_short}
+                release_info["git"] = {
+                    "commit": commit,
+                    "commit_short": commit_short,
+                }
                 release_info["github"] = {"release": release["html_url"]}
                 release_data_patch.append(release_info)
                 logging.debug(
@@ -420,7 +453,8 @@ def create_initial_nightly_releases(stable_releases):
     if stable_releases:
         # Get the earliest stable release timestamp
         first_stable_release = min(
-            stable_releases, key=lambda r: r["lifecycle"]["released"]["timestamp"]
+            stable_releases,
+            key=lambda r: r["lifecycle"]["released"]["timestamp"],
         )
         # Convert the timestamp to a datetime object and set the time to 06:00 UTC
         start_date = datetime.utcfromtimestamp(
@@ -495,7 +529,8 @@ def create_single_release(release_type, args, existing_releases):
             lifecycle_extended_timestamp = int(extended_date.timestamp())
         except ValueError:
             logging.error(
-                "Error: Invalid --lifecycle-extended-isodatetime format. Use ISO format: YYYY-MM-DDTHH:MM:SS"
+                "Error: Invalid --lifecycle-extended-isodatetime format. "
+                "Use ISO format: YYYY-MM-DDTHH:MM:SS"
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
@@ -519,7 +554,8 @@ def create_single_release(release_type, args, existing_releases):
             lifecycle_eol_timestamp = int(eol_date.timestamp())
         except ValueError:
             logging.error(
-                "Error: Invalid --lifecycle-eol-isodatetime format. Use ISO format: YYYY-MM-DDTHH:MM:SS"
+                "Error: Invalid --lifecycle-eol-isodatetime format. "
+                "Use ISO format: YYYY-MM-DDTHH:MM:SS"
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
@@ -553,7 +589,8 @@ def create_single_release(release_type, args, existing_releases):
         # For 'stable' releases, version should not contain '.'
         if "." in args.version:
             logging.error(
-                "Error: Invalid --version format for stable release. Use format: major (integer without '.')"
+                "Error: Invalid --version format for stable release. "
+                "Use format: major (integer without '.')"
             )
             sys.exit(ERROR_CODES["validation_error"])
         try:
@@ -581,9 +618,11 @@ def create_single_release(release_type, args, existing_releases):
             else:
                 micro = int(version_parts[2])
 
-        except ValueError as e:
+        except ValueError:
             logging.error(
-                f"Error: Invalid --version format. Use format: major.minor (for versions < 2000.0.0) or major.minor.micro (for versions >= 2000.0.0)"
+                "Error: Invalid --version format. Use format: "
+                "major.minor (for versions < 2000.0.0) or "
+                "major.minor.micro (for versions >= 2000.0.0)"
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
@@ -704,7 +743,12 @@ def create_single_release(release_type, args, existing_releases):
 
 
 def delete_release(
-    args, next_releases, stable_releases, patch_releases, nightly_releases, dev_releases
+    args,
+    next_releases,
+    stable_releases,
+    patch_releases,
+    nightly_releases,
+    dev_releases,
 ):
     """Delete a release by name from the appropriate release list."""
     release_type, major, minor, micro = parse_release_name(args.delete)
@@ -759,8 +803,8 @@ def set_latest_minor_eol_to_major(stable_releases, patch_releases):
     # Group releases by major version
     for release in patch_releases:
         major = release["version"]["major"]
-        minor = release.get("version", {}).get("minor")
-        micro = release.get("version", {}).get("micro")
+        # minor = release.get("version", {}).get("minor")  # unused
+        # micro = release.get("version", {}).get("micro")  # unused
         releases_by_major.setdefault(major, []).append(release)
 
     # For each major version, sort the minor releases and set the EOL
@@ -770,7 +814,8 @@ def set_latest_minor_eol_to_major(stable_releases, patch_releases):
 
         # Find the corresponding stable release for this major version
         stable_release = next(
-            (r for r in stable_releases if r["version"]["major"] == major), None
+            (r for r in stable_releases if r["version"]["major"] == major),
+            None,
         )
 
         # Loop through all minor releases
@@ -796,7 +841,7 @@ def load_input(filename):
 
         merged_releases = input_data.get("releases", [])
         if len(merged_releases) == 0:
-            logging.error(f"Error, no releases found in JSON from file")
+            logging.error("Error, no releases found in JSON from file")
             sys.exit(ERROR_CODES["input_parameter_missing"])
         next_releases = [r for r in merged_releases if r["type"] == "next"]
         stable_releases = [r for r in merged_releases if r["type"] == "stable"]
@@ -828,7 +873,7 @@ def load_input_stdin():
 
         merged_releases = input_data.get("releases", [])
         if len(merged_releases) == 0:
-            logging.error(f"Error, no releases found in JSON from stdin")
+            logging.error("Error, no releases found in JSON from stdin")
             sys.exit(ERROR_CODES["input_parameter_missing"])
         next_releases = [r for r in merged_releases if r["type"] == "next"]
         stable_releases = [r for r in merged_releases if r["type"] == "stable"]
@@ -837,7 +882,10 @@ def load_input_stdin():
         dev_releases = [r for r in merged_releases if r["type"] == "dev"]
 
         logging.debug(
-            f"Parsed releases from stdin - next: {len(next_releases)}, stable: {len(stable_releases)}, patch: {len(patch_releases)}, nightly: {len(nightly_releases)}, dev: {len(dev_releases)}"
+            f"Parsed releases from stdin - "
+            f"next: {len(next_releases)}, stable: {len(stable_releases)}, "
+            f"patch: {len(patch_releases)}, nightly: {len(nightly_releases)}, "
+            f"dev: {len(dev_releases)}"
         )
 
         return (
@@ -856,18 +904,21 @@ def load_input_stdin():
 
 
 def parse_release_name(release_name):
-    """Parse the release name in the format 'type-major.minor.micro' or 'type-major.minor' or 'type-major'."""
+    """Parse the release name in the format 'type-major.minor.micro' or
+    'type-major.minor' or 'type-major'."""
     valid_types = ["next", "stable", "patch", "nightly", "dev"]
     type_and_version = release_name.split("-", 1)
     if len(type_and_version) != 2:
         logging.error(
-            "Error: Invalid release name format. Expected 'type-major.minor.micro' or 'type-major.minor' or 'type-major'"
+            "Error: Invalid release name format. Expected "
+            "'type-major.minor.micro' or 'type-major.minor' or 'type-major'"
         )
         sys.exit(ERROR_CODES["validation_error"])
     release_type = type_and_version[0]
     if release_type not in valid_types:
         logging.error(
-            f"Error: Invalid release type '{release_type}'. Must be one of {', '.join(valid_types)}."
+            f"Error: Invalid release type '{release_type}'. "
+            f"Must be one of {', '.join(valid_types)}."
         )
         sys.exit(ERROR_CODES["validation_error"])
     version = type_and_version[1]
@@ -908,7 +959,10 @@ def validate_release_data(release, errors):
     except ValidationError as e:
         # Construct the field path that caused the validation error
         field_path = ".".join([str(p) for p in e.absolute_path])
-        error_message = f"Validation error for release '{release['name']}' at '{field_path}': {e.message}"
+        error_message = (
+            f"Validation error for release '{release['name']}' "
+            f"at '{field_path}': {e.message}"
+        )
         logging.error(error_message)
         errors.append(error_message)
         return False
@@ -956,13 +1010,15 @@ def diff_releases(existing_merged_releases, merged_releases):
                     for path, change in changes.items():
                         formatted_path = path.replace("root", "")
                         logging.info(
-                            f"{release_name} - {change_type}: {formatted_path} changed from '{change['old_value']}' to '{change['new_value']}'"
+                            f"{release_name} - {change_type}: {formatted_path} "
+                            f"changed from '{change['old_value']}' to '{change['new_value']}'"
                         )
                 elif change_type == "type_changes":
                     for path, change in changes.items():
                         formatted_path = path.replace("root", "")
                         logging.info(
-                            f"{release_name} - {change_type}: {formatted_path} type changed from '{change['old_type']}' to '{change['new_type']}'"
+                            f"{release_name} - {change_type}: {formatted_path} "
+                            f"type changed from '{change['old_type']}' to '{change['new_type']}'"
                         )
                 elif change_type in [
                     "dictionary_item_added",
@@ -972,7 +1028,8 @@ def diff_releases(existing_merged_releases, merged_releases):
                 ]:
                     changes_list = sorted(list(changes))
                     for change in changes_list:
-                        formatted_change = change.replace("root", "")
+                        # formatted_change = change.replace("root", "")  # unused
+                        pass
 
 
 def save_output_file(data, filename, format="yaml"):
@@ -1006,12 +1063,18 @@ def create_s3_bucket(args, bucket_name=None, region=None):
             Bucket=bucket_name,
             Tagging={
                 "TagSet": [
-                    {"Key": "sec-by-def-public-storage-exception", "Value": "enabled"},
+                    {
+                        "Key": "sec-by-def-public-storage-exception",
+                        "Value": "enabled",
+                    },
                     {
                         "Key": "sec-by-def-objectversioning-exception",
                         "Value": "enabled",
                     },
-                    {"Key": "sec-by-def-encrypt-storage-exception", "Value": "enabled"},
+                    {
+                        "Key": "sec-by-def-encrypt-storage-exception",
+                        "Value": "enabled",
+                    },
                 ]
             },
         )
@@ -1086,7 +1149,8 @@ def download_from_s3(bucket_name, bucket_key, local_file):
     except ClientError as e:
         if e.response["Error"]["Code"] == "404":
             logging.warning(
-                f"No existing file found at 's3://{bucket_name}/{bucket_key}', starting with a fresh file."
+                f"No existing file found at 's3://{bucket_name}/{bucket_key}', "
+                f"starting with a fresh file."
             )
             return None  # No existing file, so we return None
         logging.error(f"Error downloading from S3: {e}")
@@ -1114,7 +1178,8 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
                 )
         except (json.JSONDecodeError, FileNotFoundError):
             logging.warning(
-                "Could not decode the existing JSON from S3 or no file exists. Starting with a fresh file."
+                "Could not decode the existing JSON from S3 or no file "
+                "exists. Starting with a fresh file."
             )
             existing_releases = []
 
@@ -1177,7 +1242,7 @@ def upload_all_local_files(bucket_name, bucket_prefix):
                     matching_files.append(file)
 
         if not matching_files:
-            logging.warning(f"No release files found to upload")
+            logging.warning("No release files found to upload")
             return
 
         # Show what will be uploaded and ask for confirmation
@@ -1221,14 +1286,20 @@ def handle_releases(args):
         return
 
     if not args.s3_update:
-        logging.warning(f"'--s3-update' was not passed, skipping S3 update.")
+        logging.warning("'--s3-update' was not passed, skipping S3 update.")
 
     create_initial_stable, create_initial_patch, create_initial_nightly = (
         False,
         False,
         False,
     )
-    next_releases, stable_releases, patch_releases, nightly_releases, dev_releases = (
+    (
+        next_releases,
+        stable_releases,
+        patch_releases,
+        nightly_releases,
+        dev_releases,
+    ) = (
         [],
         [],
         [],
@@ -1301,13 +1372,21 @@ def handle_releases(args):
         # Add stdin input or file input data if provided (existing releases will be overwritten)
         if args.input_stdin or args.input:
             if args.input_stdin:
-                input_next, input_stable, input_patch, input_nightly, input_dev = (
-                    load_input_stdin()
-                )
+                (
+                    input_next,
+                    input_stable,
+                    input_patch,
+                    input_nightly,
+                    input_dev,
+                ) = load_input_stdin()
             elif args.input:
-                input_next, input_stable, input_patch, input_nightly, input_dev = (
-                    load_input(args.input_file)
-                )
+                (
+                    input_next,
+                    input_stable,
+                    input_patch,
+                    input_nightly,
+                    input_dev,
+                ) = load_input(args.input_file)
             next_releases = merge_input_data(next_releases, input_next)
             stable_releases = merge_input_data(stable_releases, input_stable)
             patch_releases = merge_input_data(patch_releases, input_patch)
@@ -1419,7 +1498,9 @@ def handle_splitted_output(args, bucket_name, bucket_prefix, releases):
                     releases_filtered,
                 )
                 upload_to_s3(
-                    s3_output_file, bucket_name, f"{bucket_prefix}{s3_output_file}"
+                    s3_output_file,
+                    bucket_name,
+                    f"{bucket_prefix}{s3_output_file}",
                 )
 
                 # Clean up temporary JSON file if local format is different
@@ -1440,14 +1521,17 @@ def handle_output(args, bucket_name, bucket_prefix, releases):
 
     # Handle S3 upload if the argument is provided
     if args.s3_update:
-        merged_releases = merge_existing_s3_data(
+        # merged_releases = merge_existing_s3_data(  # unused
+        merge_existing_s3_data(
             bucket_name,
             f"{bucket_prefix}{os.path.basename(output_file)}",
             output_file,
             releases,
         )
         upload_to_s3(
-            output_file, bucket_name, f"{bucket_prefix}{os.path.basename(output_file)}"
+            output_file,
+            bucket_name,
+            f"{bucket_prefix}{os.path.basename(output_file)}",
         )
 
 
@@ -1508,22 +1592,26 @@ def parse_arguments():
     parser.add_argument(
         "--delete",
         type=str,
-        help="Delete a release by name (format: type-major.minor or type-major.minor.micro). Requires --s3-update.",
+        help="Delete a release by name (format: type-major.minor or "
+        "type-major.minor.micro). Requires --s3-update.",
     )
     parser.add_argument(
         "--create-initial-releases",
         type=str,
-        help="Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.",
+        help="Comma-separated list of initial releases to retrieve and "
+        "generate: 'stable,patch,nightly'.",
     )
     parser.add_argument(
         "--create",
         type=str,
-        help="Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.",
+        help="Create a release for this type using the current timestamp "
+        "and git information (choose one of: stable,patch,nightly,dev,next)'.",
     )
     parser.add_argument(
         "--version",
         type=str,
-        help="Manually specify the version (format: major.minor for versions < 2000.0.0, or major.minor.micro for versions >= 2000.0.0).",
+        help="Manually specify the version (format: major.minor for "
+        "versions < 2000.0.0, or major.minor.micro for versions >= 2000.0.0).",
     )
     parser.add_argument(
         "--commit",
@@ -1533,22 +1621,26 @@ def parse_arguments():
     parser.add_argument(
         "--lifecycle-released-isodatetime",
         type=str,
-        help="Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).",
+        help="Manually specify the release date and time in ISO format "
+        "(YYYY-MM-DDTHH:MM:SS).",
     )
     parser.add_argument(
         "--lifecycle-extended-isodatetime",
         type=str,
-        help="Manually specify the extended maintenance date and time in ISO format (YYYY-MM-DDTHH:MM:SS).",
+        help="Manually specify the extended maintenance date and time in "
+        "ISO format (YYYY-MM-DDTHH:MM:SS).",
     )
     parser.add_argument(
         "--lifecycle-eol-isodatetime",
         type=str,
-        help="Manually specify the EOL date and time in ISO format (YYYY-MM-DDTHH:MM:SS).",
+        help="Manually specify the EOL date and time in ISO format "
+        "(YYYY-MM-DDTHH:MM:SS).",
     )
     parser.add_argument(
         "--no-query",
         action="store_true",
-        help="Do not query and use existing releases using glrd command. Be careful, this can delete your releases.",
+        help="Do not query and use existing releases using glrd command. "
+        "Be careful, this can delete your releases.",
     )
     parser.add_argument(
         "--input-stdin",
@@ -1561,7 +1653,8 @@ def parse_arguments():
     parser.add_argument(
         "--no-output-split",
         action="store_true",
-        help="Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.",
+        help="Do not split Output into stable+patch and nightly. Additional "
+        "output-files *-nightly and *-dev will not be created.",
     )
     parser.add_argument(
         "--s3-create-bucket", action="store_true", help="Create an S3 bucket."
@@ -1574,10 +1667,12 @@ def parse_arguments():
     parser.add_argument(
         "--output-all",
         action="store_true",
-        help="Download and write all release files found in S3 to local disk",
+        help="Download and write all release files found in S3 to " "local disk",
     )
     parser.add_argument(
-        "--input-all", action="store_true", help="Upload all local release files to S3"
+        "--input-all",
+        action="store_true",
+        help="Upload all local release files to S3",
     )
     parser.add_argument("-V", action="version", version=f"%(prog)s {get_version()}")
 

@@ -9,9 +9,14 @@ import requests
 import tabulate
 import yaml
 
-from glrd.util import *
-from python_gardenlinux_lib.flavors.parse_flavors import *
-from python_gardenlinux_lib.s3.s3 import *
+from glrd.util import (
+    DEFAULTS,
+    ERROR_CODES,
+    get_current_timestamp,
+    timestamp_to_isotime,
+    get_version,
+    NoAliasDumper,
+)
 
 DEFAULTS = dict(
     DEFAULTS,
@@ -207,7 +212,10 @@ def format_structured_output(releases, output_format):
         return json.dumps(data, indent=2)
     else:  # yaml
         return yaml.dump(
-            data, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper
+            data,
+            default_flow_style=False,
+            sort_keys=False,
+            Dumper=NoAliasDumper,
         )
 
 
@@ -386,7 +394,8 @@ def sort_releases(releases):
         if isinstance(major, int) and major >= 2000:
             return (major, minor, micro)
         else:
-            # For versions < 2000.0.0 or non-integer majors (like 'next'), exclude micro from sorting
+            # For versions < 2000.0.0 or non-integer majors (like 'next'),
+            # exclude micro from sorting
             return (major, minor, 0)
 
     return sorted(releases, key=sort_key)
@@ -414,7 +423,13 @@ def load_split_releases(
     release_type, input_type, input_url, input_file_prefix, input_format
 ):
     """Load and split releases based on type."""
-    releases_next, releases_stable, releases_patch, releases_nightly, releases_dev = (
+    (
+        releases_next,
+        releases_stable,
+        releases_patch,
+        releases_nightly,
+        releases_dev,
+    ) = (
         [],
         [],
         [],
@@ -473,16 +488,17 @@ def load_all_releases(
     no_input_split=False,
 ):
     """Load releases either from a single source or split by type."""
-    # if args.no_input_split:
     if no_input_split:
-        # return load_releases(args.input, is_url=(args.input_type == 'url')).get('releases', [])
-        return load_releases(input_source, is_url=(input_type == "url")).get(
+        return load_releases(input_url, is_url=(input_type == "url")).get(
             "releases", []
         )
     else:
-        # return load_split_releases(input)
         return load_split_releases(
-            release_type, input_type, input_url, input_file_prefix, input_format
+            release_type,
+            input_type,
+            input_url,
+            input_file_prefix,
+            input_format,
         )
 
 
@@ -524,7 +540,8 @@ def parse_arguments():
     parser.add_argument(
         "--no-input-split",
         action="store_true",
-        help="Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.",
+        help="Do not split Input into stable+patch and nightly. No additional "
+        "input-files *-nightly and *-dev will be parsed.",
     )
 
     parser.add_argument(
@@ -538,7 +555,8 @@ def parse_arguments():
         "--output-description",
         type=str,
         default=DEFAULTS["QUERY_OUTPUT_DESCRIPTION"],
-        help="Description, added to certain outputs, e.g. mermaid (default: 'Garden Linux Releases').",
+        help="Description, added to certain outputs, e.g. mermaid "
+        "(default: 'Garden Linux Releases').",
     )
 
     parser.add_argument(
@@ -559,13 +577,15 @@ def parse_arguments():
         "--type",
         type=str,
         default=DEFAULTS["QUERY_TYPE"],
-        help="Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next",
+        help="Filter by release types (comma-separated list, default: "
+        "stable,patch). E.g., --type stable,patch,nightly,dev,next",
     )
 
     parser.add_argument(
         "--version",
         type=str,
-        help="Filter by a specific version (major or major.minor.micro). E.g., --version 1312 or --version 1312.0 or --version 1312.0.0",
+        help="Filter by a specific version (major or major.minor.micro). "
+        "E.g., --version 1312 or --version 1312.0 or --version 1312.0.0",
     )
 
     parser.add_argument(
@@ -581,7 +601,9 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "--no-header", action="store_true", help="Omit the header in shell output."
+        "--no-header",
+        action="store_true",
+        help="Omit the header in shell output.",
     )
 
     parser.add_argument("-V", action="version", version=f"%(prog)s {get_version()}")

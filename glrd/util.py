@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -29,9 +28,12 @@ DEFAULTS = {
     "RELEASE_TYPES": ["next", "stable", "patch", "nightly", "dev"],
     # Query defaults
     "QUERY_TYPE": "stable,patch",
-    "QUERY_FIELDS": "Name,Version,Type,GitCommitShort,ReleaseDate,ExtendedMaintenance,EndOfMaintenance",
+    "QUERY_FIELDS": (
+        "Name,Version,Type,GitCommitShort,ReleaseDate,"
+        "ExtendedMaintenance,EndOfMaintenance"
+    ),
     "QUERY_INPUT_TYPE": "url",
-    "QUERY_INPUT_URL": "https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com",
+    "QUERY_INPUT_URL": ("https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com"),
     "QUERY_INPUT_FILE_PREFIX": "releases",
     "QUERY_INPUT_FORMAT": "json",
     "QUERY_OUTPUT_TYPE": "shell",
@@ -47,7 +49,7 @@ DEFAULTS = {
     # S3 configuration for releases artifacts
     "ARTIFACTS_S3_BUCKET_NAME": "gardenlinux-github-releases",
     "ARTIFACTS_S3_PREFIX": "objects/",
-    "ARTIFACTS_S3_BASE_URL": "https://gardenlinux-github-releases.s3.amazonaws.com",
+    "ARTIFACTS_S3_BASE_URL": ("https://gardenlinux-github-releases.s3.amazonaws.com"),
     # Garden Linux repository
     "GL_REPO_NAME": "gardenlinux",
     "GL_REPO_OWNER": "gardenlinux",
@@ -98,14 +100,14 @@ def timestamp_to_isotime(timestamp):
         dt = datetime.fromtimestamp(timestamp, pytz.UTC)
         return dt.strftime("%H:%M:%S")
     except (ValueError, TypeError):
-        logging.error(f"Error converting timestamp to ISO time: {timestamp}")
+        logging.error(f"Error converting timestamp to ISO time: " f"{timestamp}")
         sys.exit(ERROR_CODES["format_error"])
 
 
 def isodate_to_timestamp(isodate):
     """
-    Convert an ISO 8601 formatted date (with or without time) to a Unix timestamp.
-    If only a date is provided, assume the time is 00:00:00 UTC.
+    Convert an ISO 8601 formatted date (with or without time) to a Unix
+    timestamp. If only a date is provided, assume the time is 00:00:00 UTC.
     """
     try:
         # Try parsing with full ISO format (date and time with 'Z' timezone)
