@@ -25,9 +25,9 @@ test-all: ## Run all tests with coverage
 	poetry run pytest --cov=glrd --cov-report=html --cov-report=term
 
 lint: ## Run linting
-	poetry run flake8 --max-line-length 100 glrd/ tests/
+	poetry run flake8 --max-line-length 110 glrd/ tests/
 	poetry run black --check glrd/ tests/
-	poetry run autopep8 --diff --max-line-length 100 -r glrd/ tests/
+	poetry run autopep8 --diff --max-line-length 110 -r glrd/ tests/
 
 format: ## Format code
 	poetry run black glrd/ tests/

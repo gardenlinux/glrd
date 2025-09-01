@@ -93,6 +93,10 @@ class TestGLRDIntegration:
         with open(filepath, "r") as f:
             return json.load(f)
 
+    # ============================================================================
+    # SCHEMA VALIDATION TESTS
+    # ============================================================================
+
     @pytest.mark.parametrize(
         "version,expected_name",
         [
@@ -270,6 +274,278 @@ class TestGLRDIntegration:
             output_file
         ), f"Output file should not be created for invalid version {version}"
 
+    def test_boundary_version_validation(self, test_dir, manage_script):
+        """Test validation at the boundary between v1 and v2 schemas (version 2000)."""
+        # Test exactly at boundary - should require v2 schema
+        prefix = os.path.join(test_dir, "releases-nightly-boundary")
+        output_file = f"{prefix}-nightly.json"
+
+        # This should fail - 2000.0 is missing micro for v2 schema
+        result = self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "nightly",
+                "--version",
+                "2000.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            expect_success=False,
+        )
+
+        assert "v2 schema" in result.stderr
+        assert "missing micro version" in result.stderr
+
+        # This should succeed - 2000.0.0 is correct v2 format
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "nightly",
+                "--version",
+                "2000.0.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "nightly-2000.0.0"
+        assert release["version"]["micro"] == 0
+
+    def test_schema_error_message_clarity(self, test_dir, manage_script):
+        """Test that error messages are clear and helpful."""
+        # Test v1 schema error message
+        result = self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "nightly",
+                "--version",
+                "1990.0.1",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                os.path.join(test_dir, "test"),
+                "--no-query",
+            ],
+            expect_success=False,
+        )
+
+        assert "v1 schema" in result.stderr
+        assert "micro version" in result.stderr
+        assert "major.minor" in result.stderr
+
+        # Test v2 schema error message
+        result = self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "nightly",
+                "--version",
+                "2222.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                os.path.join(test_dir, "test"),
+                "--no-query",
+            ],
+            expect_success=False,
+        )
+
+        assert "v2 schema" in result.stderr
+        assert "missing micro version" in result.stderr
+        assert "major.minor.micro" in result.stderr
+
+    # ============================================================================
+    # RELEASE CREATION TESTS
+    # ============================================================================
+
+    def test_stable_release_validation(self, test_dir, manage_script):
+        """Test stable release validation (always uses v1 schema)."""
+        prefix = os.path.join(test_dir, "releases-stable")
+        output_file = f"{prefix}-stable.json"
+
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "stable",
+                "--version",
+                "27",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "stable-27"
+        assert release["type"] == "stable"
+        assert release["version"]["major"] == 27
+        # Stable releases don't have minor/micro in version object
+        assert "minor" not in release["version"]
+        assert "micro" not in release["version"]
+
+    def test_patch_release_validation(self, test_dir, manage_script):
+        """Test patch release validation with different schema versions."""
+        prefix = os.path.join(test_dir, "releases-patch")
+        output_file = f"{prefix}-patch.json"
+
+        # Test v1 schema patch release - create directly via stdin
+        patch_v1_json = {
+            "releases": [
+                {
+                    "name": "patch-27.0",
+                    "type": "patch",
+                    "version": {"major": 27, "minor": 0},
+                    "lifecycle": {
+                        "released": {"isodate": "2020-06-09", "timestamp": 1591694693},
+                        "eol": {"isodate": "2021-03-09", "timestamp": 1615248000},
+                    },
+                    "git": {
+                        "commit": "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3",
+                        "commit_short": "504eae6",
+                    },
+                    "github": {
+                        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/27.0"
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                }
+            ]
+        }
+
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(patch_v1_json),
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "patch-27.0"
+        assert "micro" not in release["version"]
+
+        # Clean up
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+        # Test v2 schema patch release - create directly via stdin
+        patch_v2_json = {
+            "releases": [
+                {
+                    "name": "patch-2000.0.0",
+                    "type": "patch",
+                    "version": {"major": 2000, "minor": 0, "micro": 0},
+                    "lifecycle": {
+                        "released": {"isodate": "2025-01-01", "timestamp": 1735689600},
+                        "eol": {"isodate": "2025-10-01", "timestamp": 1759363200},
+                    },
+                    "git": {
+                        "commit": "b94a8fe5ccb19ba61c4c0873d391e987982fbbd4",
+                        "commit_short": "2000ae6",
+                    },
+                    "github": {
+                        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/2000.0.0"
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                }
+            ]
+        }
+
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(patch_v2_json),
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "patch-2000.0.0"
+        assert release["version"]["micro"] == 0
+
+    def test_dev_release_validation(self, test_dir, manage_script):
+        """Test dev release validation with different schema versions."""
+        prefix = os.path.join(test_dir, "releases-dev")
+        output_file = f"{prefix}-dev.json"
+
+        # Test v1 schema dev release
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "dev",
+                "--version",
+                "1990.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "dev-1990.0"
+        assert "micro" not in release["version"]
+
+        # Clean up
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+        # Test v2 schema dev release
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "dev",
+                "--version",
+                "2000.0.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "dev-2000.0.0"
+        assert release["version"]["micro"] == 0
+
+    # ============================================================================
+    # QUERY AND VERIFICATION TESTS
+    # ============================================================================
+
     def test_glrd_query_verification(self, test_dir, manage_script, query_script):
         """Test that generated JSON files can be queried with glrd."""
         prefix = os.path.join(test_dir, "releases-nightly")
@@ -318,51 +594,6 @@ class TestGLRDIntegration:
         assert release["name"] == "nightly-1990.0"
         assert release["type"] == "nightly"
 
-    def test_query_created_dev_release(self, test_dir, manage_script, query_script):
-        """Create a dev release and query it using glrd."""
-        prefix = os.path.join(test_dir, "releases-dev-ci")
-        output_file = f"{prefix}-dev.json"
-
-        # Create dev release (v1 schema)
-        self.run_manage_command(
-            manage_script,
-            [
-                "--create",
-                "dev",
-                "--version",
-                "1990.0",
-                "--output-format",
-                "json",
-                "--output-file-prefix",
-                prefix,
-                "--no-query",
-            ],
-        )
-
-        # Ensure file exists
-        assert os.path.exists(output_file)
-
-        # Query using glrd
-        result = self.run_query_command(
-            query_script,
-            [
-                "--type",
-                "dev",
-                "--input-type",
-                "file",
-                "--input-file-prefix",
-                prefix,
-                "--output-format",
-                "json",
-            ],
-        )
-
-        data = json.loads(result.stdout)
-        assert "releases" in data
-        assert len(data["releases"]) == 1
-        assert data["releases"][0]["name"] == "dev-1990.0"
-        assert data["releases"][0]["type"] == "dev"
-
     def test_query_created_stable_release(self, test_dir, manage_script, query_script):
         """Create a stable release and query it using glrd."""
         prefix = os.path.join(test_dir, "releases-stable-ci")
@@ -407,6 +638,51 @@ class TestGLRDIntegration:
         assert len(data["releases"]) == 1
         assert data["releases"][0]["name"] == "stable-1312"
         assert data["releases"][0]["type"] == "stable"
+
+    def test_query_created_dev_release(self, test_dir, manage_script, query_script):
+        """Create a dev release and query it using glrd."""
+        prefix = os.path.join(test_dir, "releases-dev-ci")
+        output_file = f"{prefix}-dev.json"
+
+        # Create dev release (v1 schema)
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "dev",
+                "--version",
+                "1990.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        # Ensure file exists
+        assert os.path.exists(output_file)
+
+        # Query using glrd
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "dev",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+
+        data = json.loads(result.stdout)
+        assert "releases" in data
+        assert len(data["releases"]) == 1
+        assert data["releases"][0]["name"] == "dev-1990.0"
+        assert data["releases"][0]["type"] == "dev"
 
     def test_create_query_patch_via_input_stdin(
         self, test_dir, manage_script, query_script
@@ -618,113 +894,140 @@ class TestGLRDIntegration:
         assert "nightly-1990.0" in names
         assert "nightly-2000.0.0" in names
 
-    @pytest.mark.skip(reason="Patch releases require complex EOL timestamp handling")
-    def test_patch_release_validation(self, test_dir, manage_script):
-        """Test patch release validation with different schema versions."""
-        prefix = os.path.join(test_dir, "releases-patch")
-        output_file = f"{prefix}-patch.json"
+    # ============================================================================
+    # ADVANCED FEATURE TESTS
+    # ============================================================================
 
-        # Test v1 schema patch release - use a version that has a corresponding stable release
-        self.run_manage_command(
-            manage_script,
-            [
-                "--create",
-                "patch",
-                "--version",
-                "27.0",
-                "--output-format",
-                "json",
-                "--output-file-prefix",
-                prefix,
-                "--no-query",
-            ],
-        )
-
-        data = self.load_json_output(output_file)
-        release = data["releases"][0]
-        assert release["name"] == "patch-27.0"
-        assert "micro" not in release["version"]
-
-        # Clean up
-        if os.path.exists(output_file):
-            os.remove(output_file)
-
-        # Test v2 schema patch release - use a version that has a corresponding stable release
-        self.run_manage_command(
-            manage_script,
-            [
-                "--create",
-                "patch",
-                "--version",
-                "2000.0.0",
-                "--output-format",
-                "json",
-                "--output-file-prefix",
-                prefix,
-                "--no-query",
-            ],
-        )
-
-        data = self.load_json_output(output_file)
-        release = data["releases"][0]
-        assert release["name"] == "patch-2000.0.0"
-        assert release["version"]["micro"] == 0
-
-    def test_dev_release_validation(self, test_dir, manage_script):
-        """Test dev release validation with different schema versions."""
-        prefix = os.path.join(test_dir, "releases-dev")
-        output_file = f"{prefix}-dev.json"
-
-        # Test v1 schema dev release
-        self.run_manage_command(
-            manage_script,
-            [
-                "--create",
-                "dev",
-                "--version",
-                "1990.0",
-                "--output-format",
-                "json",
-                "--output-file-prefix",
-                prefix,
-                "--no-query",
-            ],
-        )
-
-        data = self.load_json_output(output_file)
-        release = data["releases"][0]
-        assert release["name"] == "dev-1990.0"
-        assert "micro" not in release["version"]
-
-        # Clean up
-        if os.path.exists(output_file):
-            os.remove(output_file)
-
-        # Test v2 schema dev release
-        self.run_manage_command(
-            manage_script,
-            [
-                "--create",
-                "dev",
-                "--version",
-                "2000.0.0",
-                "--output-format",
-                "json",
-                "--output-file-prefix",
-                prefix,
-                "--no-query",
-            ],
-        )
-
-        data = self.load_json_output(output_file)
-        release = data["releases"][0]
-        assert release["name"] == "dev-2000.0.0"
-        assert release["version"]["micro"] == 0
-
-    def test_stable_release_validation(self, test_dir, manage_script):
-        """Test stable release validation (always uses v1 schema)."""
-        prefix = os.path.join(test_dir, "releases-stable")
+    def test_update_release_with_custom_lifecycle(self, test_dir, manage_script):
+        """Test updating a release with custom lifecycle flags."""
+        prefix = os.path.join(test_dir, "releases-custom-lifecycle")
         output_file = f"{prefix}-stable.json"
+
+        # Create a stable release with custom lifecycle dates
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "stable",
+                "--version",
+                "9999",
+                "--lifecycle-released-isodatetime",
+                "2025-01-15T10:30:00",
+                "--lifecycle-extended-isodatetime",
+                "2025-07-15T10:30:00",
+                "--lifecycle-eol-isodatetime",
+                "2025-10-15T10:30:00",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        # Verify the file exists and contains custom dates
+        assert os.path.exists(output_file)
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "stable-9999"
+        assert release["type"] == "stable"
+
+        # Check custom lifecycle dates
+        lifecycle = release["lifecycle"]
+        assert lifecycle["released"]["isodate"] == "2025-01-15"
+        assert lifecycle["extended"]["isodate"] == "2025-07-15"
+        assert lifecycle["eol"]["isodate"] == "2025-10-15"
+
+    def test_create_delete_release(self, test_dir, manage_script):
+        """Test that delete functionality requires query and fails appropriately with --no-query."""
+        prefix = os.path.join(test_dir, "releases-create-delete")
+        output_file = f"{prefix}-nightly.json"
+
+        # Create a release via stdin first
+        releases_json = {
+            "releases": [
+                {
+                    "name": "nightly-1995.0",
+                    "type": "nightly",
+                    "version": {"major": 1995, "minor": 0},
+                    "lifecycle": {
+                        "released": {"isodate": "2025-01-01", "timestamp": 1735689600}
+                    },
+                    "git": {
+                        "commit": "deadbeef1234567890abcdef1234567890abcdef",
+                        "commit_short": "deadbeef",
+                    },
+                    "github": {
+                        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1995.0"
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                }
+            ]
+        }
+
+        # Create release via stdin
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(releases_json),
+        )
+
+        # Verify the file exists
+        assert os.path.exists(output_file)
+        data = self.load_json_output(output_file)
+        assert len(data["releases"]) == 1
+
+        # Test that delete with --no-query fails appropriately
+        result = self.run_manage_command(
+            manage_script,
+            [
+                "--delete",
+                "nightly-1995.0",
+                "--no-query",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+            ],
+            expect_success=False,
+        )
+
+        # Verify error message
+        assert "--delete' cannot run with '--no-query'" in result.stderr
+
+        # Test that delete without --input flag also fails (since it doesn't query S3 in tests)
+        result = self.run_manage_command(
+            manage_script,
+            [
+                "--delete",
+                "nightly-1995.0",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+            ],
+            expect_success=False,
+        )
+
+        # This should fail because there's no S3 data in tests
+        assert "not found in the existing data" in result.stderr
+
+    def test_create_releases_with_custom_commit(self, test_dir, manage_script):
+        """Test creating each release type with custom commit."""
+        custom_commit = "deadbeef1234567890abcdef1234567890abcdef"
+        custom_commit_short = "deadbeef"
+
+        # Test stable release with custom commit
+        stable_prefix = os.path.join(test_dir, "releases-stable-custom-commit")
+        stable_file = f"{stable_prefix}-stable.json"
 
         self.run_manage_command(
             manage_script,
@@ -732,111 +1035,126 @@ class TestGLRDIntegration:
                 "--create",
                 "stable",
                 "--version",
-                "27",
+                "8888",
+                "--commit",
+                custom_commit,
                 "--output-format",
                 "json",
                 "--output-file-prefix",
-                prefix,
+                stable_prefix,
                 "--no-query",
             ],
         )
 
-        data = self.load_json_output(output_file)
+        assert os.path.exists(stable_file)
+        data = self.load_json_output(stable_file)
         release = data["releases"][0]
-        assert release["name"] == "stable-27"
+        assert release["name"] == "stable-8888"
         assert release["type"] == "stable"
-        assert release["version"]["major"] == 27
-        # Stable releases don't have minor/micro in version object
-        assert "minor" not in release["version"]
-        assert "micro" not in release["version"]
+        # Stable releases don't have git commit info in the schema
 
-    def test_boundary_version_validation(self, test_dir, manage_script):
-        """Test validation at the boundary between v1 and v2 schemas (version 2000)."""
-        # Test exactly at boundary - should require v2 schema
-        prefix = os.path.join(test_dir, "releases-nightly-boundary")
-        output_file = f"{prefix}-nightly.json"
+        # Test patch release with custom commit (v1 schema) - use stdin to avoid EOL issues
+        patch_prefix = os.path.join(test_dir, "releases-patch-custom-commit")
+        patch_file = f"{patch_prefix}-patch.json"
 
-        # This should fail - 2000.0 is missing micro for v2 schema
-        result = self.run_manage_command(
+        patch_json = {
+            "releases": [
+                {
+                    "name": "patch-1990.0",
+                    "type": "patch",
+                    "version": {"major": 1990, "minor": 0},
+                    "lifecycle": {
+                        "released": {"isodate": "2025-01-01", "timestamp": 1735689600},
+                        "eol": {"isodate": "2025-10-01", "timestamp": 1759363200},
+                    },
+                    "git": {"commit": custom_commit, "commit_short": "deadbeef"},
+                    "github": {
+                        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1990.0"
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                }
+            ]
+        }
+
+        self.run_manage_command_stdin(
             manage_script,
             [
-                "--create",
-                "nightly",
-                "--version",
-                "2000.0",
+                "--input-stdin",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
-                prefix,
+                patch_prefix,
                 "--no-query",
             ],
-            expect_success=False,
+            json.dumps(patch_json),
         )
 
-        assert "v2 schema" in result.stderr
-        assert "missing micro version" in result.stderr
+        assert os.path.exists(patch_file)
+        data = self.load_json_output(patch_file)
+        release = data["releases"][0]
+        assert release["name"] == "patch-1990.0"
+        assert release["type"] == "patch"
+        assert release["git"]["commit"] == custom_commit
+        assert release["git"]["commit_short"] == custom_commit_short
 
-        # This should succeed - 2000.0.0 is correct v2 format
+        # Test nightly release with custom commit (v1 schema)
+        nightly_prefix = os.path.join(test_dir, "releases-nightly-custom-commit")
+        nightly_file = f"{nightly_prefix}-nightly.json"
+
         self.run_manage_command(
             manage_script,
             [
                 "--create",
                 "nightly",
                 "--version",
-                "2000.0.0",
+                "1991.0",
+                "--commit",
+                custom_commit,
                 "--output-format",
                 "json",
                 "--output-file-prefix",
-                prefix,
+                nightly_prefix,
                 "--no-query",
             ],
         )
 
-        data = self.load_json_output(output_file)
+        assert os.path.exists(nightly_file)
+        data = self.load_json_output(nightly_file)
         release = data["releases"][0]
-        assert release["name"] == "nightly-2000.0.0"
-        assert release["version"]["micro"] == 0
+        assert release["name"] == "nightly-1991.0"
+        assert release["type"] == "nightly"
+        assert release["git"]["commit"] == custom_commit
+        assert release["git"]["commit_short"] == custom_commit_short
 
-    def test_error_message_clarity(self, test_dir, manage_script):
-        """Test that error messages are clear and helpful."""
-        # Test v1 schema error message
-        result = self.run_manage_command(
+        # Test dev release with custom commit (v1 schema)
+        dev_prefix = os.path.join(test_dir, "releases-dev-custom-commit")
+        dev_file = f"{dev_prefix}-dev.json"
+
+        self.run_manage_command(
             manage_script,
             [
                 "--create",
-                "nightly",
+                "dev",
                 "--version",
-                "1990.0.1",
+                "1992.0",
+                "--commit",
+                custom_commit,
                 "--output-format",
                 "json",
                 "--output-file-prefix",
-                os.path.join(test_dir, "test"),
+                dev_prefix,
                 "--no-query",
             ],
-            expect_success=False,
         )
 
-        assert "v1 schema" in result.stderr
-        assert "micro version" in result.stderr
-        assert "major.minor" in result.stderr
+        assert os.path.exists(dev_file)
+        data = self.load_json_output(dev_file)
+        release = data["releases"][0]
+        assert release["name"] == "dev-1992.0"
+        assert release["type"] == "dev"
+        assert release["git"]["commit"] == custom_commit
+        assert release["git"]["commit_short"] == custom_commit_short
 
-        # Test v2 schema error message
-        result = self.run_manage_command(
-            manage_script,
-            [
-                "--create",
-                "nightly",
-                "--version",
-                "2222.0",
-                "--output-format",
-                "json",
-                "--output-file-prefix",
-                os.path.join(test_dir, "test"),
-                "--no-query",
-            ],
-            expect_success=False,
-        )
-
-        assert "v2 schema" in result.stderr
-        assert "missing micro version" in result.stderr
-        assert "major.minor.micro" in result.stderr
+        # Note: next releases don't use git commit info and require lifecycle dates,
+        # so we skip testing next releases with custom commit
