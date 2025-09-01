@@ -12,35 +12,39 @@ SCHEMA_V1 = {
             "type": {"enum": ["next"]},
             "version": {
                 "type": "object",
-                "properties": { "major": {"enum": ["next"]}},
-                "required": ["major"]
+                "properties": {"major": {"enum": ["next"]}},
+                "required": ["major"],
             },
             "lifecycle": {
                 "type": "object",
                 "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]},
+                    "released": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": "string", "format": "date"},
+                            "timestamp": {"type": "integer"},
+                        },
+                        "required": ["isodate", "timestamp"],
+                    },
                     "extended": {
                         "type": "object",
                         "properties": {
                             "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
+                            "timestamp": {"type": ["integer"]},
+                        },
                     },
                     "eol": {
                         "type": "object",
                         "properties": {
                             "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    }
+                            "timestamp": {"type": ["integer"]},
+                        },
+                    },
                 },
-                "required": ["released", "extended", "eol"]
-            }
+                "required": ["released", "extended", "eol"],
+            },
         },
-        "required": ["name", "type", "version", "lifecycle"]
+        "required": ["name", "type", "version", "lifecycle"],
     },
     "stable": {
         "type": "object",
@@ -50,34 +54,38 @@ SCHEMA_V1 = {
             "version": {
                 "type": "object",
                 "properties": {"major": {"type": "integer"}},
-                "required": ["major"]
+                "required": ["major"],
             },
             "lifecycle": {
                 "type": "object",
                 "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]},
+                    "released": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": "string", "format": "date"},
+                            "timestamp": {"type": "integer"},
+                        },
+                        "required": ["isodate", "timestamp"],
+                    },
                     "extended": {
                         "type": "object",
                         "properties": {
                             "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
+                            "timestamp": {"type": ["integer"]},
+                        },
                     },
                     "eol": {
                         "type": "object",
                         "properties": {
                             "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    }
+                            "timestamp": {"type": ["integer"]},
+                        },
+                    },
                 },
-                "required": ["released", "extended", "eol"]
-            }
+                "required": ["released", "extended", "eol"],
+            },
         },
-        "required": ["name", "type", "version", "lifecycle"]
+        "required": ["name", "type", "version", "lifecycle"],
     },
     "patch": {
         "type": "object",
@@ -88,56 +96,52 @@ SCHEMA_V1 = {
                 "type": "object",
                 "properties": {
                     "major": {"type": "integer"},
-                    "minor": {"type": "integer"}
+                    "minor": {"type": "integer"},
                 },
-                "required": ["major", "minor"]
+                "required": ["major", "minor"],
             },
             "lifecycle": {
                 "type": "object",
                 "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]},
+                    "released": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": "string", "format": "date"},
+                            "timestamp": {"type": "integer"},
+                        },
+                        "required": ["isodate", "timestamp"],
+                    },
                     "eol": {
                         "type": "object",
                         "properties": {
                             "isodate": {"type": ["string"], "format": "date"},
-                            "timestamp": {"type": ["integer"]}
-                        }
-                    }
+                            "timestamp": {"type": ["integer"]},
+                        },
+                    },
                 },
-                "required": ["released", "eol"]
+                "required": ["released", "eol"],
             },
             "git": {
                 "type": "object",
                 "properties": {
                     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
                 },
-                "required": ["commit", "commit_short"]
+                "required": ["commit", "commit_short"],
             },
             "github": {
                 "type": "object",
                 "properties": {"release": {"type": "string", "format": "uri"}},
-                "required": ["release"]
+                "required": ["release"],
             },
-            "flavors": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
+            "flavors": {"type": "array", "items": {"type": "string"}},
             "attributes": {
                 "type": "object",
-                "properties": {
-                    "source_repo": {
-                        "type": "boolean",
-                        "default": True
-                    }
-                },
-                "required": ["source_repo"]
-            }
+                "properties": {"source_repo": {"type": "boolean", "default": True}},
+                "required": ["source_repo"],
+            },
         },
-        "required": ["name", "type", "version", "lifecycle", "git", "github"]
+        "required": ["name", "type", "version", "lifecycle", "git", "github"],
     },
     "nightly": {
         "type": "object",
@@ -146,43 +150,42 @@ SCHEMA_V1 = {
             "type": {"enum": ["nightly"]},
             "version": {
                 "type": "object",
-                "properties": {"major": {"type": "integer"}, "minor": {"type": "integer"}},
-                "required": ["major", "minor"]
+                "properties": {
+                    "major": {"type": "integer"},
+                    "minor": {"type": "integer"},
+                },
+                "required": ["major", "minor"],
             },
             "lifecycle": {
                 "type": "object",
                 "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]}
+                    "released": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": "string", "format": "date"},
+                            "timestamp": {"type": "integer"},
+                        },
+                        "required": ["isodate", "timestamp"],
+                    }
                 },
-                "required": ["released"]
+                "required": ["released"],
             },
             "git": {
                 "type": "object",
                 "properties": {
                     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
                 },
-                "required": ["commit", "commit_short"]
+                "required": ["commit", "commit_short"],
             },
-            "flavors": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
+            "flavors": {"type": "array", "items": {"type": "string"}},
             "attributes": {
                 "type": "object",
-                "properties": {
-                    "source_repo": {
-                        "type": "boolean",
-                        "default": True
-                    }
-                },
-                "required": ["source_repo"]
-            }
+                "properties": {"source_repo": {"type": "boolean", "default": True}},
+                "required": ["source_repo"],
+            },
         },
-        "required": ["name", "type", "version", "lifecycle", "git"]
+        "required": ["name", "type", "version", "lifecycle", "git"],
     },
     "dev": {
         "type": "object",
@@ -191,42 +194,41 @@ SCHEMA_V1 = {
             "type": {"enum": ["dev"]},
             "version": {
                 "type": "object",
-                "properties": {"major": {"type": "integer"}, "minor": {"type": "integer"}},
-                "required": ["major", "minor"]
+                "properties": {
+                    "major": {"type": "integer"},
+                    "minor": {"type": "integer"},
+                },
+                "required": ["major", "minor"],
             },
             "lifecycle": {
                 "type": "object",
                 "properties": {
-                    "released": {"type": "object", "properties": {
-                        "isodate": {"type": "string", "format": "date"},
-                        "timestamp": {"type": "integer"}},
-                        "required": ["isodate", "timestamp"]}
+                    "released": {
+                        "type": "object",
+                        "properties": {
+                            "isodate": {"type": "string", "format": "date"},
+                            "timestamp": {"type": "integer"},
+                        },
+                        "required": ["isodate", "timestamp"],
+                    }
                 },
-                "required": ["released"]
+                "required": ["released"],
             },
             "git": {
                 "type": "object",
                 "properties": {
                     "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"}
+                    "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
                 },
-                "required": ["commit", "commit_short"]
+                "required": ["commit", "commit_short"],
             },
-            "flavors": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
+            "flavors": {"type": "array", "items": {"type": "string"}},
             "attributes": {
                 "type": "object",
-                "properties": {
-                    "source_repo": {
-                        "type": "boolean",
-                        "default": True
-                    }
-                },
-                "required": ["source_repo"]
-            }
+                "properties": {"source_repo": {"type": "boolean", "default": True}},
+                "required": ["source_repo"],
+            },
         },
-        "required": ["name", "type", "version", "lifecycle", "git"]
-    }
+        "required": ["name", "type", "version", "lifecycle", "git"],
+    },
 }

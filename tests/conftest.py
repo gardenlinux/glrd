@@ -12,7 +12,7 @@ from pathlib import Path
 @pytest.fixture
 def test_dir():
     """Create a temporary directory for test files."""
-    test_dir = tempfile.mkdtemp(prefix='glrd_test_')
+    test_dir = tempfile.mkdtemp(prefix="glrd_test_")
     yield test_dir
     # Cleanup
     if os.path.exists(test_dir):

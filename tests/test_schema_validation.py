@@ -20,7 +20,9 @@ class TestSchemaValidation:
         ]
 
         for version, release_type in valid_cases:
-            is_valid, error_message = validate_input_version_format(version, release_type)
+            is_valid, error_message = validate_input_version_format(
+                version, release_type
+            )
             assert is_valid, f"Version {version} should be valid for {release_type}"
             assert error_message is None
 
@@ -34,8 +36,12 @@ class TestSchemaValidation:
         ]
 
         for version, release_type in invalid_cases:
-            is_valid, error_message = validate_input_version_format(version, release_type)
-            assert not is_valid, f"Version {version} should be invalid for {release_type}"
+            is_valid, error_message = validate_input_version_format(
+                version, release_type
+            )
+            assert (
+                not is_valid
+            ), f"Version {version} should be invalid for {release_type}"
             assert "v1 schema" in error_message
             assert "micro version" in error_message
 
@@ -49,7 +55,9 @@ class TestSchemaValidation:
         ]
 
         for version, release_type in valid_cases:
-            is_valid, error_message = validate_input_version_format(version, release_type)
+            is_valid, error_message = validate_input_version_format(
+                version, release_type
+            )
             assert is_valid, f"Version {version} should be valid for {release_type}"
             assert error_message is None
 
@@ -63,8 +71,12 @@ class TestSchemaValidation:
         ]
 
         for version, release_type in invalid_cases:
-            is_valid, error_message = validate_input_version_format(version, release_type)
-            assert not is_valid, f"Version {version} should be invalid for {release_type}"
+            is_valid, error_message = validate_input_version_format(
+                version, release_type
+            )
+            assert (
+                not is_valid
+            ), f"Version {version} should be invalid for {release_type}"
             assert "v2 schema" in error_message
             assert "missing micro version" in error_message
 
@@ -83,7 +95,9 @@ class TestSchemaValidation:
         ]
 
         for version, release_type in test_cases:
-            is_valid, error_message = validate_input_version_format(version, release_type)
+            is_valid, error_message = validate_input_version_format(
+                version, release_type
+            )
             assert is_valid, f"Version {version} should be valid for {release_type}"
             assert error_message is None
 
@@ -113,7 +127,9 @@ class TestSchemaValidation:
         for version in invalid_formats:
             # This should raise an exception or return invalid
             try:
-                is_valid, error_message = validate_input_version_format(version, "nightly")
+                is_valid, error_message = validate_input_version_format(
+                    version, "nightly"
+                )
                 # If no exception, should be invalid
                 assert not is_valid, f"Version {version} should be invalid"
             except (ValueError, IndexError):
