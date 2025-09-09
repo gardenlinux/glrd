@@ -7,10 +7,14 @@ import sys
 import boto3
 
 from glrd.manage import download_all_s3_files, upload_all_local_files
-from glrd.util import DEFAULTS, ERROR_CODES, get_version
-
-from python_gardenlinux_lib.flavors.parse_flavors import parse_flavors_commit
-from python_gardenlinux_lib.s3.s3 import get_s3_artifacts
+from glrd.util import (
+    DEFAULTS,
+    ERROR_CODES,
+    get_version,
+    get_flavors_from_git,
+    get_s3_artifacts_data,
+    get_flavors_from_s3_artifacts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -168,30 +172,23 @@ def update_flavors(release):
     commit = release["git"]["commit"]
     version = release["version"]
 
-    # First try flavors.yaml
-    flavors = parse_flavors_commit(
-        commit, version=version, query_s3=False, logger=logger
-    )
+    # First try flavors.yaml using gardenlinux library
+    flavors = get_flavors_from_git(commit)
 
     # If no flavors found, try S3
     if not flavors:
         logger.info(
             f"No flavors found in flavors.yaml for {release['name']}, checking S3..."
         )
-        artifacts_data = get_s3_artifacts(
+        # Get S3 artifacts using gardenlinux library
+        artifacts_data = get_s3_artifacts_data(
             DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
             DEFAULTS["ARTIFACTS_S3_PREFIX"],
-            logger=logger,
+            DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
         )
 
         if artifacts_data:
-            flavors = parse_flavors_commit(
-                commit,
-                version=version,
-                query_s3=True,
-                s3_objects=artifacts_data,
-                logger=logger,
-            )
+            flavors = get_flavors_from_s3_artifacts(artifacts_data, version, commit)
         else:
             logger.warning(f"No artifacts data available from S3 for {release['name']}")
 
@@ -291,8 +288,11 @@ def process_releases(args):
     logging.info(
         f"Fetching artifacts data from S3 bucket {DEFAULTS['ARTIFACTS_S3_BUCKET_NAME']}"
     )
-    artifacts_data = get_s3_artifacts(
-        DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"], DEFAULTS["ARTIFACTS_S3_PREFIX"]
+    # Get S3 artifacts using gardenlinux library
+    artifacts_data = get_s3_artifacts_data(
+        DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
+        DEFAULTS["ARTIFACTS_S3_PREFIX"],
+        DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
     )
 
     if not artifacts_data or not artifacts_data.get("artifacts"):
@@ -400,12 +400,7 @@ def process_releases(args):
                 update_source_repo_attribute([release])
 
                 # Get flavors for this commit using artifacts data
-                flavors = parse_flavors_commit(
-                    commit,
-                    version=version,
-                    query_s3=True,
-                    s3_objects=artifacts_data,
-                )
+                flavors = get_flavors_from_s3_artifacts(artifacts_data, version, commit)
                 if flavors:
                     release["flavors"] = flavors
                     modified = True
