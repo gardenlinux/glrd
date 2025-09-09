@@ -19,9 +19,10 @@ jsonschema = "*"
 PyYAML = "*"
 pytz = "*"
 python-dateutil = "*"
+pygit2 = "*"
 requests = "*"
 tabulate = "*"
-python-gardenlinux-lib = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", branch = "0.6.0" }
+gardenlinux = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", tag = "0.10.0" }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"

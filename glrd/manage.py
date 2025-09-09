@@ -29,11 +29,10 @@ from glrd.util import (
     timestamp_to_isodate,
     get_version,
     NoAliasDumper,
+    get_flavors_from_git,
+    get_s3_artifacts_data,
+    get_flavors_from_s3_artifacts,
 )
-from python_gardenlinux_lib.flavors.parse_flavors import (
-    parse_flavors_commit,
-)
-from python_gardenlinux_lib.s3.s3 import get_s3_artifacts, get_s3_client
 
 # silence boto3 logging
 boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
@@ -643,29 +642,21 @@ def create_single_release(release_type, args, existing_releases):
     # Create version object
     version = {"major": major, "minor": minor, "patch": patch}
 
-    # First try to get flavors from flavors.yaml
-    flavors = parse_flavors_commit(
-        commit, version=version, query_s3=False, logger=logging.getLogger()
-    )
+    flavors = get_flavors_from_git(commit)
 
     # Only if no flavors found in flavors.yaml, try S3
     if not flavors:
         logging.info("No flavors found in flavors.yaml, checking S3 artifacts...")
         # Get artifacts data from S3 with caching
-        artifacts_data = get_s3_artifacts(
+        # Get S3 artifacts using gardenlinux library
+        artifacts_data = get_s3_artifacts_data(
             DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
             DEFAULTS["ARTIFACTS_S3_PREFIX"],
-            logger=logging.getLogger(),
+            DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
         )
 
         if artifacts_data:
-            flavors = parse_flavors_commit(
-                commit,
-                version=version,
-                query_s3=True,
-                s3_objects=artifacts_data,
-                logger=logging.getLogger(),
-            )
+            flavors = get_flavors_from_s3_artifacts(artifacts_data, version, commit)
         else:
             logging.warning("No artifacts data available from S3")
 
@@ -1207,7 +1198,7 @@ def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
 
 def download_all_s3_files(bucket_name, bucket_prefix):
     """Download all release files from S3 bucket."""
-    s3_client = get_s3_client()
+    s3_client = boto3.client("s3")
 
     try:
         # List all objects in the bucket with the given prefix
