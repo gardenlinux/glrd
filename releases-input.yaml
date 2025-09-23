@@ -1,8 +1,8 @@
 # This file is supposed to provide data that is not automatically retrievable.
 # e.g. lifecycle.extended and lifecycle.eol data
 releases:
-  - name: stable-27
-    type: 'stable'
+  - name: major-27
+    type: 'major'
     version:
       major: 27
     lifecycle:
@@ -13,8 +13,8 @@ releases:
         isodate: '2020-12-09'
       eol:
         isodate: '2021-03-09'
-  - name: stable-184
-    type: 'stable'
+  - name: major-184
+    type: 'major'
     version:
       major: 184
     lifecycle:
@@ -25,8 +25,8 @@ releases:
         isodate: '2020-04-29'
       eol:
         isodate: '2021-07-29'
-  - name: stable-318
-    type: 'stable'
+  - name: major-318
+    type: 'major'
     version:
       major: 318
     lifecycle:
@@ -37,8 +37,8 @@ releases:
         isodate: '2021-10-28'
       eol:
         isodate: '2023-01-28'
-  - name: stable-576
-    type: 'stable'
+  - name: major-576
+    type: 'major'
     version:
       major: 576
     lifecycle:
@@ -49,8 +49,8 @@ releases:
         isodate: '2023-05-17'
       eol:
         isodate: '2023-08-17'
-  - name: stable-934
-    type: 'stable'
+  - name: major-934
+    type: 'major'
     version:
       major: 934
     lifecycle:
@@ -61,8 +61,8 @@ releases:
         isodate: '2023-12-05'
       eol:
         isodate: '2024-03-05'
-  - name: stable-1312
-    type: 'stable'
+  - name: major-1312
+    type: 'major'
     version:
       major: 1312
     lifecycle:
@@ -73,8 +73,8 @@ releases:
         isodate: '2024-05-03'
       eol:
         isodate: '2024-08-03'
-  - name: stable-1443
-    type: 'stable'
+  - name: major-1443
+    type: 'major'
     version:
       major: 1443
     lifecycle:
@@ -85,8 +85,8 @@ releases:
         isodate: '2024-09-13'
       eol:
         isodate: '2025-01-13'
-  - name: stable-1592
-    type: 'stable'
+  - name: major-1592
+    type: 'major'
     version:
       major: 1592
     lifecycle:

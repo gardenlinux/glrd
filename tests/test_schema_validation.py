@@ -15,7 +15,7 @@ class TestSchemaValidation:
         # Valid v1 formats (versions < 2000)
         valid_cases = [
             ("1990.0", "nightly"),
-            ("1999.0", "patch"),
+            ("1999.0", "minor"),
             ("1500.5", "dev"),
         ]
 
@@ -28,10 +28,10 @@ class TestSchemaValidation:
 
     def test_v1_schema_invalid_formats(self):
         """Test v1 schema validation with invalid formats."""
-        # Invalid v1 formats (versions < 2000 with micro)
+        # Invalid v1 formats (versions < 2000 with patch)
         invalid_cases = [
             ("1990.0.1", "nightly"),
-            ("1999.0.5", "patch"),
+            ("1999.0.5", "minor"),
             ("1500.5.2", "dev"),
         ]
 
@@ -43,14 +43,14 @@ class TestSchemaValidation:
                 not is_valid
             ), f"Version {version} should be invalid for {release_type}"
             assert "v1 schema" in error_message
-            assert "micro version" in error_message
+            assert "patch version" in error_message
 
     def test_v2_schema_valid_formats(self):
         """Test v2 schema validation with valid formats."""
         # Valid v2 formats (versions >= 2000)
         valid_cases = [
             ("2000.0.0", "nightly"),
-            ("2222.0.0", "patch"),
+            ("2222.0.0", "minor"),
             ("3000.5.2", "dev"),
         ]
 
@@ -63,10 +63,10 @@ class TestSchemaValidation:
 
     def test_v2_schema_invalid_formats(self):
         """Test v2 schema validation with invalid formats."""
-        # Invalid v2 formats (versions >= 2000 without micro)
+        # Invalid v2 formats (versions >= 2000 without patch)
         invalid_cases = [
             ("2000.0", "nightly"),
-            ("2222.0", "patch"),
+            ("2222.0", "minor"),
             ("3000.5", "dev"),
         ]
 
@@ -78,16 +78,16 @@ class TestSchemaValidation:
                 not is_valid
             ), f"Version {version} should be invalid for {release_type}"
             assert "v2 schema" in error_message
-            assert "missing micro version" in error_message
+            assert "missing patch version" in error_message
 
-    def test_stable_next_releases(self):
-        """Test that stable and next releases don't use version validation."""
-        # Stable and next releases should always pass validation
+    def test_major_next_releases(self):
+        """Test that major and next releases don't use version validation."""
+        # Major and next releases should always pass validation
         test_cases = [
-            ("1990.0", "stable"),
-            ("2000.0.0", "stable"),
-            ("1990.0.1", "stable"),
-            ("2000.0", "stable"),
+            ("1990.0", "major"),
+            ("2000.0.0", "major"),
+            ("1990.0.1", "major"),
+            ("2000.0", "major"),
             ("1990.0", "next"),
             ("2000.0.0", "next"),
             ("1990.0.1", "next"),
@@ -107,13 +107,13 @@ class TestSchemaValidation:
         is_valid, error_message = validate_input_version_format("2000.0", "nightly")
         assert not is_valid
         assert "v2 schema" in error_message
-        assert "missing micro version" in error_message
+        assert "missing patch version" in error_message
 
         # Just below boundary - should use v1 schema
         is_valid, error_message = validate_input_version_format("1999.0.1", "nightly")
         assert not is_valid
         assert "v1 schema" in error_message
-        assert "micro version" in error_message
+        assert "patch version" in error_message
 
     def test_invalid_version_formats(self):
         """Test validation with completely invalid version formats."""

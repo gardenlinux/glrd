@@ -25,9 +25,9 @@ ERROR_CODES = {
 
 DEFAULTS = {
     # Release types
-    "RELEASE_TYPES": ["next", "stable", "patch", "nightly", "dev"],
+    "RELEASE_TYPES": ["next", "major", "minor", "nightly", "dev"],
     # Query defaults
-    "QUERY_TYPE": "stable,patch",
+    "QUERY_TYPE": "major,minor",
     "QUERY_FIELDS": (
         "Name,Version,Type,GitCommitShort,ReleaseDate,"
         "ExtendedMaintenance,EndOfMaintenance"
@@ -77,7 +77,7 @@ def get_version():
 
 
 def extract_version_data(tag_name):
-    """Extract major, minor and micro version numbers from a tag."""
+    """Extract major, minor and patch version numbers from a tag."""
     version_regex = re.compile(r"^(\d+)\.?(\d+)?\.?(\d+)?$")
     match = version_regex.match(tag_name)
     return (

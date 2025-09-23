@@ -1,9 +1,9 @@
 """
 Schema v1 for Garden Linux releases with versions < 2000.0.0.
-This schema version does not require the micro field in version objects.
+This schema version does not require the patch field in version objects.
 """
 
-# Schema v1 for releases that don't have micro field
+# Schema v1 for releases that don't have patch field
 SCHEMA_V1 = {
     "next": {
         "type": "object",
@@ -55,11 +55,11 @@ SCHEMA_V1 = {
         },
         "required": ["name", "type", "version", "lifecycle"],
     },
-    "stable": {
+    "major": {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["stable"]},
+            "type": {"enum": ["major"]},
             "version": {
                 "type": "object",
                 "properties": {"major": {"type": "integer"}},
@@ -105,11 +105,11 @@ SCHEMA_V1 = {
         },
         "required": ["name", "type", "version", "lifecycle"],
     },
-    "patch": {
+    "minor": {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["patch"]},
+            "type": {"enum": ["minor"]},
             "version": {
                 "type": "object",
                 "properties": {

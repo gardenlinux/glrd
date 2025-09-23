@@ -1,9 +1,9 @@
 """
 Schema v2 for Garden Linux releases with versions >= 2000.0.0.
-This schema version requires the micro field in version objects.
+This schema version requires the patch field in version objects.
 """
 
-# Schema v2 for releases that have micro field
+# Schema v2 for releases that have patch field
 SCHEMA_V2 = {
     "next": {
         "type": "object",
@@ -55,11 +55,11 @@ SCHEMA_V2 = {
         },
         "required": ["name", "type", "version", "lifecycle"],
     },
-    "stable": {
+    "major": {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["stable"]},
+            "type": {"enum": ["major"]},
             "version": {
                 "type": "object",
                 "properties": {"major": {"type": "integer"}},
@@ -105,19 +105,19 @@ SCHEMA_V2 = {
         },
         "required": ["name", "type", "version", "lifecycle"],
     },
-    "patch": {
+    "minor": {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
-            "type": {"enum": ["patch"]},
+            "type": {"enum": ["minor"]},
             "version": {
                 "type": "object",
                 "properties": {
                     "major": {"type": "integer"},
                     "minor": {"type": "integer"},
-                    "micro": {"type": "integer"},
+                    "patch": {"type": "integer"},
                 },
-                "required": ["major", "minor", "micro"],
+                "required": ["major", "minor", "patch"],
             },
             "lifecycle": {
                 "type": "object",
@@ -191,9 +191,9 @@ SCHEMA_V2 = {
                 "properties": {
                     "major": {"type": "integer"},
                     "minor": {"type": "integer"},
-                    "micro": {"type": "integer"},
+                    "patch": {"type": "integer"},
                 },
-                "required": ["major", "minor", "micro"],
+                "required": ["major", "minor", "patch"],
             },
             "lifecycle": {
                 "type": "object",
@@ -245,9 +245,9 @@ SCHEMA_V2 = {
                 "properties": {
                     "major": {"type": "integer"},
                     "minor": {"type": "integer"},
-                    "micro": {"type": "integer"},
+                    "patch": {"type": "integer"},
                 },
-                "required": ["major", "minor", "micro"],
+                "required": ["major", "minor", "patch"],
             },
             "lifecycle": {
                 "type": "object",

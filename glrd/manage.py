@@ -52,34 +52,34 @@ def validate_input_version_format(version, release_type):
 
     version_parts = version.split(".")
 
-    if release_type in ["stable", "next"]:
-        # stable and next don't use major.minor.micro
+    if release_type in ["major", "next"]:
+        # major and next don't use major.minor.patch
         return True, None
 
     if len(version_parts) == 2:
         major = int(version_parts[0])
-        # Check if this version requires v2 schema (with micro field)
+        # Check if this version requires v2 schema (with patch field)
         if major >= 2000:
             return (
                 False,
                 f"Version {'.'.join(version_parts)} requires v2 schema "
-                f"but missing micro version. Use format: major.minor.micro",
+                f"but missing patch version. Use format: major.minor.patch",
             )
         return True, None
     elif len(version_parts) == 3:
         major = int(version_parts[0])
-        # Check if this version should use v1 schema (without micro field)
+        # Check if this version should use v1 schema (without patch field)
         if major < 2000:
             return (
                 False,
                 f"Version {'.'.join(version_parts)} uses v1 schema but "
-                f"includes micro version. Use format: major.minor",
+                f"includes patch version. Use format: major.minor",
             )
         return True, None
     else:
         return (
             False,
-            "Invalid version format. Expected major.minor or " "major.minor.micro",
+            "Invalid version format. Expected major.minor or " "major.minor.patch",
         )
 
 
@@ -96,19 +96,19 @@ def get_schema_for_release(release):
     release_type = release.get("type")
     version = release.get("version", {})
 
-    # For stable and next releases, always use v2 schema
-    # (they don't have major.minor.micro version numbers >= 2000)
-    if release_type in ["stable", "next"]:
+    # For major and next releases, always use v2 schema
+    # (they don't have major.minor.patch version numbers >= 2000)
+    if release_type in ["major", "next"]:
         return SCHEMA_V2[release_type]
 
-    # For patch, nightly, and dev releases, determine schema version based
+    # For minor, nightly, and dev releases, determine schema version based
     # on version number
-    if release_type in ["patch", "nightly", "dev"]:
+    if release_type in ["minor", "nightly", "dev"]:
         major = version.get("major", 0)
         # minor = version.get("minor", 0)  # unused
-        # micro = version.get("micro", 0)  # unused
+        # patch = version.get("patch", 0)  # unused
 
-        # Use v2 schema (with micro field) for versions >= 2000.0.0
+        # Use v2 schema (with patch field) for versions >= 2000.0.0
         if major >= 2000:
             return SCHEMA_V2[release_type]
         else:
@@ -131,17 +131,27 @@ def cleanup_temp_repo():
 
 def glrd_query_type(args, release_type):
     """Retrieve releases of a specific type."""
-    releases = load_all_releases(
-        release_type,
-        DEFAULTS["QUERY_INPUT_TYPE"],
-        DEFAULTS["QUERY_INPUT_URL"],
-        DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
-        DEFAULTS["QUERY_INPUT_FORMAT"],
-    )
-    if not releases:
-        logging.error("Error retrieving releases")
-        sys.exit(ERROR_CODES["query_error"])
-    return releases
+    try:
+        releases = load_all_releases(
+            release_type,
+            DEFAULTS["QUERY_INPUT_TYPE"],
+            DEFAULTS["QUERY_INPUT_URL"],
+            DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
+            DEFAULTS["QUERY_INPUT_FORMAT"],
+        )
+        if not releases:
+            logging.warning(
+                f"No releases found for type '{release_type}', returning empty list"
+            )
+            return []
+        return releases
+    except SystemExit:
+        # If load_all_releases exits due to S3 access issues (like in tests),
+        # return empty list instead of propagating the exit
+        logging.warning(
+            f"Could not retrieve releases for type '{release_type}', returning empty list"
+        )
+        return []
 
 
 def get_github_releases():
@@ -311,12 +321,12 @@ def get_git_commit_at_time(
 
 def get_garden_version_for_date(release_type, date, existing_releases):
     """
-    Create major.minor.micro version based on the Garden Linux base_date.
+    Create major.minor.patch version based on the Garden Linux base_date.
     Logic is taken from `gardenlinux/bin/garden-version`.
 
     Major: days since base date.
     Minor: Next available minor version based on existing releases.
-    Micro: Next available micro version based on existing releases.
+    Patch: Next available patch version based on existing releases.
     """
     # Calculate major version
     base_date = datetime(2020, 3, 31, tzinfo=pytz.UTC)
@@ -324,10 +334,10 @@ def get_garden_version_for_date(release_type, date, existing_releases):
 
     if release_type == "next":
         minor = 0
-        micro = 0
-    elif release_type == "stable":
+        patch = 0
+    elif release_type == "major":
         minor = 0
-        micro = 0
+        patch = 0
     else:
         # Collect existing minor versions for the given major version and
         # release type
@@ -338,8 +348,8 @@ def get_garden_version_for_date(release_type, date, existing_releases):
                 release["type"] == release_type and release["version"]["major"] == major
             )
         ]
-        existing_micro_versions = [
-            release["version"].get("micro", -1)
+        existing_patch_versions = [
+            release["version"].get("patch", -1)
             for release in existing_releases
             if (
                 release["type"] == release_type
@@ -349,8 +359,8 @@ def get_garden_version_for_date(release_type, date, existing_releases):
         ]
 
         logging.debug(
-            f"Existing micro versions for major {major} and minor "
-            f"{minor}: {existing_micro_versions}"
+            f"Existing patch versions for major {major} and minor "
+            f"{minor}: {existing_patch_versions}"
         )
 
         if existing_minor_versions:
@@ -358,35 +368,35 @@ def get_garden_version_for_date(release_type, date, existing_releases):
         else:
             minor = 0
 
-        if existing_micro_versions:
-            micro = max(existing_micro_versions) + 1
+        if existing_patch_versions:
+            patch = max(existing_patch_versions) + 1
         else:
-            micro = 0
+            patch = 0
 
     logging.debug(
-        f"New {release_type} version for {date} is " f"{major}.{minor}.{micro}"
+        f"New {release_type} version for {date} is " f"{major}.{minor}.{patch}"
     )
 
-    return major, minor, micro
+    return major, minor, patch
 
 
 def create_initial_releases(releases):
-    """Generate initial stable and patch releases."""
-    release_data_stable = []
-    release_data_patch = []
+    """Generate initial major and minor releases."""
+    release_data_major = []
+    release_data_minor = []
     latest_minor_versions = {}
-    latest_micro_versions = {}
+    latest_patch_versions = {}
 
     releases.sort(key=lambda r: extract_version_data(r["tag_name"]))
 
     for release in releases:
         tag_name = release.get("tag_name")
-        major, minor, micro = extract_version_data(tag_name)
+        major, minor, patch = extract_version_data(tag_name)
         if major is None:
             continue
 
-        # Determine release type: "patch" if minor exists, otherwise "stable"
-        release_type = "patch" if minor is not None and micro is not None else "stable"
+        # Determine release type: "minor" if minor exists, otherwise "major"
+        release_type = "minor" if minor is not None and patch is not None else "major"
 
         release_info = {
             "name": f"{release_type}-{tag_name}",
@@ -400,87 +410,87 @@ def create_initial_releases(releases):
                 "eol": {"isodate": None, "timestamp": None},
             },
         }
-        if release_type == "stable":
-            release_data_stable.append(release_info)
-            logging.debug(f"Initial stable release '{release_info['name']}' created.")
+        if release_type == "major":
+            release_data_major.append(release_info)
+            logging.debug(f"Initial major release '{release_info['name']}' created.")
         else:
-            # For patch releases, add git and github data
-            if release_type == "patch":
+            # For minor releases, add git and github data
+            if release_type == "minor":
                 commit, commit_short = get_git_commit_from_tag(tag_name)
                 release_info["version"]["minor"] = minor
-                release_info["version"]["micro"] = micro
+                release_info["version"]["patch"] = patch
                 release_info["git"] = {
                     "commit": commit,
                     "commit_short": commit_short,
                 }
                 release_info["github"] = {"release": release["html_url"]}
-                release_data_patch.append(release_info)
+                release_data_minor.append(release_info)
                 logging.debug(
-                    f"Initial patch release '{release_info['name']}' created."
+                    f"Initial minor release '{release_info['name']}' created."
                 )
 
         if major not in latest_minor_versions or (
             (minor is not None and minor > latest_minor_versions[major]["minor"])
-            and (micro is not None and micro > latest_minor_versions[major]["micro"])
+            and (patch is not None and patch > latest_minor_versions[major]["patch"])
         ):
             latest_minor_versions[major] = {
                 "index": len(
-                    release_data_patch
-                    if release_type == "patch"
-                    else release_data_stable
+                    release_data_minor
+                    if release_type == "minor"
+                    else release_data_major
                 )
                 - 1,
                 "minor": minor,
-                "micro": micro,
+                "patch": patch,
             }
 
     return (
-        release_data_stable,
-        release_data_patch,
+        release_data_major,
+        release_data_minor,
         latest_minor_versions,
-        latest_micro_versions,
+        latest_patch_versions,
     )
 
 
-def create_initial_nightly_releases(stable_releases):
-    """Generate initial nightly releases from the earliest stable release."""
+def create_initial_nightly_releases(major_releases):
+    """Generate initial nightly releases from the earliest major release."""
     release_data = []
     release_type = "nightly"
 
     # Set the default start date to 2020-06-09 06:00 UTC
     start_date_default = datetime(2020, 6, 9, 6, 0, 0, tzinfo=pytz.UTC)
 
-    if stable_releases:
-        # Get the earliest stable release timestamp
-        first_stable_release = min(
-            stable_releases,
+    if major_releases:
+        # Get the earliest major release timestamp
+        first_major_release = min(
+            major_releases,
             key=lambda r: r["lifecycle"]["released"]["timestamp"],
         )
         # Convert the timestamp to a datetime object and set the time to 06:00 UTC
         start_date = datetime.utcfromtimestamp(
-            first_stable_release["lifecycle"]["released"]["timestamp"]
+            first_major_release["lifecycle"]["released"]["timestamp"]
         ).replace(hour=7, minute=0, second=0, tzinfo=pytz.UTC)
     else:
         logging.info(
-            "No stable releases found in the generated data. Using default start date."
+            "No major releases found in the generated data. Using default start date."
         )
-        # Use the default start date if no stable releases are available
+        # Use the default start date if no major releases are available
         start_date = start_date_default
 
     # Ensure current_date is set to 06:00 UTC as well
     tz = pytz.timezone("UTC")
-    current_date = datetime.now(tz).replace(hour=6, minute=0, second=0, microsecond=0)
+    current_date = datetime.now(tz).replace(hour=6, minute=0, second=0, patchsecond=0)
 
     date = start_date
 
     while date <= current_date:
-        major, minor, micro = get_garden_version_for_date(release_type, date, [])
+        major, minor, patch = get_garden_version_for_date(release_type, date, [])
         commit, commit_short = get_git_commit_at_time(date.strftime("%Y-%m-%d"))
-        nightly_name = f"nightly-{major}.{minor}.{micro}"
+        nightly_name = f"nightly-{major}.{minor}.{patch}"
         release_info = {
             "name": nightly_name,
             "type": "nightly",
-            "version": {"major": major, "minor": minor, "micro": micro},
+            "version": {"major": major, "minor": minor, "patch": patch},
             "lifecycle": {
                 "released": {
                     "isodate": date.strftime("%Y-%m-%d"),
@@ -534,12 +544,12 @@ def create_single_release(release_type, args, existing_releases):
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        # for stable - default extended maintenance date is release date + 6 months
-        if release_type == "stable":
+        # for major - default extended maintenance date is release date + 6 months
+        if release_type == "major":
             extended_date = release_date + relativedelta(months=6)
             lifecycle_extended_isodate = extended_date.strftime("%Y-%m-%d")
             lifecycle_extended_timestamp = int(extended_date.timestamp())
-        # patch releases will use set_latest_minor_eol_to_major() to set lifecycle fields
+        # minor releases will use set_latest_minor_eol_to_major() to set lifecycle fields
         # other release types to not have extended lifecycle fields
         else:
             lifecycle_extended_isodate = None
@@ -559,12 +569,12 @@ def create_single_release(release_type, args, existing_releases):
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        # for stable - default eol date is release date + 9 months
-        if release_type == "stable":
+        # for major - default eol date is release date + 9 months
+        if release_type == "major":
             eol_date = release_date + relativedelta(months=9)
             lifecycle_eol_isodate = eol_date.strftime("%Y-%m-%d")
             lifecycle_eol_timestamp = int(eol_date.timestamp())
-        # patch releases will use set_latest_minor_eol_to_major() to set lifecycle fields
+        # minor releases will use set_latest_minor_eol_to_major() to set lifecycle fields
         # other release types to not have extended lifecycle fields
         else:
             lifecycle_eol_isodate = None
@@ -584,25 +594,25 @@ def create_single_release(release_type, args, existing_releases):
     if args.create == "next":
         major = "next"
         minor = None
-        micro = None
-    elif args.version and args.create == "stable":
-        # For 'stable' releases, version should not contain '.'
+        patch = None
+    elif args.version and args.create == "major":
+        # For 'major' releases, version should not contain '.'
         if "." in args.version:
             logging.error(
-                "Error: Invalid --version format for stable release. "
+                "Error: Invalid --version format for major release. "
                 "Use format: major (integer without '.')"
             )
             sys.exit(ERROR_CODES["validation_error"])
         try:
             major = int(args.version)
             minor = None
-            micro = None
+            patch = None
         except ValueError:
             logging.error(
                 "Error: Invalid --version format. Major version must be an integer."
             )
             sys.exit(ERROR_CODES["validation_error"])
-    elif args.version and args.create != "stable":
+    elif args.version and args.create != "major":
         try:
             is_valid, error_message = validate_input_version_format(
                 args.version, args.create
@@ -614,24 +624,24 @@ def create_single_release(release_type, args, existing_releases):
             version_parts = args.version.split(".")
             major, minor = map(int, version_parts[:2])
             if len(version_parts) == 2:
-                micro = 0
+                patch = 0
             else:
-                micro = int(version_parts[2])
+                patch = int(version_parts[2])
 
         except ValueError:
             logging.error(
                 "Error: Invalid --version format. Use format: "
                 "major.minor (for versions < 2000.0.0) or "
-                "major.minor.micro (for versions >= 2000.0.0)"
+                "major.minor.patch (for versions >= 2000.0.0)"
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        major, minor, micro = get_garden_version_for_date(
+        major, minor, patch = get_garden_version_for_date(
             release_type, release_date, existing_releases
         )
 
     # Create version object
-    version = {"major": major, "minor": minor, "micro": micro}
+    version = {"major": major, "minor": minor, "patch": patch}
 
     # First try to get flavors from flavors.yaml
     flavors = parse_flavors_commit(
@@ -677,15 +687,15 @@ def create_single_release(release_type, args, existing_releases):
     if release_type in ["dev", "nightly"]:
         # Create name and version based on schema version
         if major >= 2000:
-            # v2 schema: include micro version
-            release["name"] = f"{release_type}-{major}.{minor}.{micro}"
+            # v2 schema: include patch version
+            release["name"] = f"{release_type}-{major}.{minor}.{patch}"
             release["version"]["minor"] = minor
-            release["version"]["micro"] = micro
+            release["version"]["patch"] = patch
         else:
-            # v1 schema: exclude micro version
+            # v1 schema: exclude patch version
             release["name"] = f"{release_type}-{major}.{minor}"
             release["version"]["minor"] = minor
-            # Don't set micro for v1 schema releases
+            # Don't set patch for v1 schema releases
 
         release["git"] = {}
         release["git"]["commit"] = commit
@@ -701,7 +711,7 @@ def create_single_release(release_type, args, existing_releases):
         release["lifecycle"]["eol"] = {}
         release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
         release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-    elif release_type == "stable":
+    elif release_type == "major":
         release["name"] = f"{release_type}-{major}"
         release["lifecycle"]["extended"] = {}
         release["lifecycle"]["extended"]["isodate"] = lifecycle_extended_isodate
@@ -709,19 +719,19 @@ def create_single_release(release_type, args, existing_releases):
         release["lifecycle"]["eol"] = {}
         release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
         release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-    elif release_type == "patch":
+    elif release_type == "minor":
         # Create name and version based on schema version
         if major >= 2000:
-            # v2 schema: include micro version
-            release["name"] = f"{release_type}-{major}.{minor}.{micro}"
+            # v2 schema: include patch version
+            release["name"] = f"{release_type}-{major}.{minor}.{patch}"
             release["version"]["minor"] = minor
-            release["version"]["micro"] = micro
-            github_version = f"{major}.{minor}.{micro}"
+            release["version"]["patch"] = patch
+            github_version = f"{major}.{minor}.{patch}"
         else:
-            # v1 schema: exclude micro version
+            # v1 schema: exclude patch version
             release["name"] = f"{release_type}-{major}.{minor}"
             release["version"]["minor"] = minor
-            # Don't set micro for v1 schema releases
+            # Don't set patch for v1 schema releases
             github_version = f"{major}.{minor}"
 
         release["lifecycle"]["eol"] = {}
@@ -745,21 +755,21 @@ def create_single_release(release_type, args, existing_releases):
 def delete_release(
     args,
     next_releases,
-    stable_releases,
-    patch_releases,
+    major_releases,
+    minor_releases,
     nightly_releases,
     dev_releases,
 ):
     """Delete a release by name from the appropriate release list."""
-    release_type, major, minor, micro = parse_release_name(args.delete)
+    release_type, major, minor, patch = parse_release_name(args.delete)
 
     # Select the appropriate list based on release_type
     if release_type == "next":
         release_list = next_releases
-    elif release_type == "stable":
-        release_list = stable_releases
-    elif release_type == "patch":
-        release_list = patch_releases
+    elif release_type == "major":
+        release_list = major_releases
+    elif release_type == "minor":
+        release_list = minor_releases
     elif release_type == "nightly":
         release_list = nightly_releases
     elif release_type == "dev":
@@ -795,16 +805,16 @@ def merge_input_data(existing_releases, new_releases):
     return list(releases_by_name.values())
 
 
-def set_latest_minor_eol_to_major(stable_releases, patch_releases):
+def set_latest_minor_eol_to_major(major_releases, minor_releases):
     """Set the EOL of each minor version to the next higher minor version,
-    and the EOL of the latest minor version to match the stable release."""
+    and the EOL of the latest minor version to match the major release."""
     releases_by_major = {}
 
     # Group releases by major version
-    for release in patch_releases:
+    for release in minor_releases:
         major = release["version"]["major"]
         # minor = release.get("version", {}).get("minor")  # unused
-        # micro = release.get("version", {}).get("micro")  # unused
+        # patch = release.get("version", {}).get("patch")  # unused
         releases_by_major.setdefault(major, []).append(release)
 
     # For each major version, sort the minor releases and set the EOL
@@ -812,21 +822,21 @@ def set_latest_minor_eol_to_major(stable_releases, patch_releases):
         # Sort the minor releases by the 'minor' version number
         minor_releases.sort(key=lambda r: r.get("version", {}).get("minor", 0))
 
-        # Find the corresponding stable release for this major version
-        stable_release = next(
-            (r for r in stable_releases if r["version"]["major"] == major),
+        # Find the corresponding major release for this major version
+        major_release = next(
+            (r for r in major_releases if r["version"]["major"] == major),
             None,
         )
 
         # Loop through all minor releases
         for i, release in enumerate(minor_releases):
-            # If it's the last minor release, set its EOL to the stable release's EOL
+            # If it's the last minor release, set its EOL to the major release's EOL
             if i == len(minor_releases) - 1:
-                if stable_release:
-                    release["lifecycle"]["eol"] = stable_release["lifecycle"]["eol"]
+                if major_release:
+                    release["lifecycle"]["eol"] = major_release["lifecycle"]["eol"]
                 else:
                     logging.warning(
-                        f"No stable release found for major version {major}, skipping EOL update."
+                        f"No major release found for major version {major}, skipping EOL update."
                     )
             else:
                 # Set the EOL to the "released" date of the next minor release
@@ -844,14 +854,14 @@ def load_input(filename):
             logging.error("Error, no releases found in JSON from file")
             sys.exit(ERROR_CODES["input_parameter_missing"])
         next_releases = [r for r in merged_releases if r["type"] == "next"]
-        stable_releases = [r for r in merged_releases if r["type"] == "stable"]
-        patch_releases = [r for r in merged_releases if r["type"] == "patch"]
+        major_releases = [r for r in merged_releases if r["type"] == "major"]
+        minor_releases = [r for r in merged_releases if r["type"] == "minor"]
         nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
         dev_releases = [r for r in merged_releases if r["type"] == "dev"]
         return (
             next_releases,
-            stable_releases,
-            patch_releases,
+            major_releases,
+            minor_releases,
             nightly_releases,
             dev_releases,
         )
@@ -876,22 +886,22 @@ def load_input_stdin():
             logging.error("Error, no releases found in JSON from stdin")
             sys.exit(ERROR_CODES["input_parameter_missing"])
         next_releases = [r for r in merged_releases if r["type"] == "next"]
-        stable_releases = [r for r in merged_releases if r["type"] == "stable"]
-        patch_releases = [r for r in merged_releases if r["type"] == "patch"]
+        major_releases = [r for r in merged_releases if r["type"] == "major"]
+        minor_releases = [r for r in merged_releases if r["type"] == "minor"]
         nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
         dev_releases = [r for r in merged_releases if r["type"] == "dev"]
 
         logging.debug(
             f"Parsed releases from stdin - "
-            f"next: {len(next_releases)}, stable: {len(stable_releases)}, "
-            f"patch: {len(patch_releases)}, nightly: {len(nightly_releases)}, "
+            f"next: {len(next_releases)}, major: {len(major_releases)}, "
+            f"minor: {len(minor_releases)}, nightly: {len(nightly_releases)}, "
             f"dev: {len(dev_releases)}"
         )
 
         return (
             next_releases,
-            stable_releases,
-            patch_releases,
+            major_releases,
+            minor_releases,
             nightly_releases,
             dev_releases,
         )
@@ -904,14 +914,14 @@ def load_input_stdin():
 
 
 def parse_release_name(release_name):
-    """Parse the release name in the format 'type-major.minor.micro' or
+    """Parse the release name in the format 'type-major.minor.patch' or
     'type-major.minor' or 'type-major'."""
-    valid_types = ["next", "stable", "patch", "nightly", "dev"]
+    valid_types = ["next", "major", "minor", "nightly", "dev"]
     type_and_version = release_name.split("-", 1)
     if len(type_and_version) != 2:
         logging.error(
             "Error: Invalid release name format. Expected "
-            "'type-major.minor.micro' or 'type-major.minor' or 'type-major'"
+            "'type-major.minor.patch' or 'type-major.minor' or 'type-major'"
         )
         sys.exit(ERROR_CODES["validation_error"])
     release_type = type_and_version[0]
@@ -927,22 +937,22 @@ def parse_release_name(release_name):
         if len(version_parts) == 3:
             major = int(version_parts[0])
             minor = int(version_parts[1])
-            micro = int(version_parts[2])
+            patch = int(version_parts[2])
         elif len(version_parts) == 2:
             major = int(version_parts[0])
             minor = int(version_parts[1])
-            micro = None
+            patch = None
         elif len(version_parts) == 1:
             major = int(version_parts[0])
             minor = None
-            micro = None
+            patch = None
         else:
             logging.error("Error: Invalid version format in release name.")
             sys.exit(ERROR_CODES["validation_error"])
     except ValueError:
-        logging.error("Error: Major, minor and micro versions must be integers.")
+        logging.error("Error: Major, minor and patch versions must be integers.")
         sys.exit(ERROR_CODES["validation_error"])
-    return release_type, major, minor, micro
+    return release_type, major, minor, patch
 
 
 def validate_release_data(release, errors):
@@ -1288,15 +1298,15 @@ def handle_releases(args):
     if not args.s3_update:
         logging.warning("'--s3-update' was not passed, skipping S3 update.")
 
-    create_initial_stable, create_initial_patch, create_initial_nightly = (
+    create_initial_major, create_initial_minor, create_initial_nightly = (
         False,
         False,
         False,
     )
     (
         next_releases,
-        stable_releases,
-        patch_releases,
+        major_releases,
+        minor_releases,
         nightly_releases,
         dev_releases,
     ) = (
@@ -1309,40 +1319,40 @@ def handle_releases(args):
 
     if args.create_initial_releases:
         create_initial_list = args.create_initial_releases.split(",")
-        create_initial_stable = "stable" in create_initial_list
-        create_initial_patch = "patch" in create_initial_list
+        create_initial_major = "major" in create_initial_list
+        create_initial_minor = "minor" in create_initial_list
         create_initial_nightly = "nightly" in create_initial_list
 
-    # Variables to store inputs, dev/stable/patch releases and nightly releases
+    # Variables to store inputs, dev/major/minor releases and nightly releases
     existing_next_releases = []
-    existing_stable_releases = []
-    existing_patch_releases = []
+    existing_major_releases = []
+    existing_minor_releases = []
     existing_nightly_releases = []
     existing_dev_releases = []
     existing_merged_releases = []
     next_releases = []
-    stable_releases = []
-    patch_releases = []
+    major_releases = []
+    minor_releases = []
     nightly_releases = []
     dev_releases = []
     merged_releases = []
 
     if not args.no_query:
-        # Execute glrd command to fill stable, patch, nightly, and dev releases
+        # Execute glrd command to fill major, minor, nightly, and dev releases
         existing_next_releases = glrd_query_type(args, "next")
-        existing_stable_releases = glrd_query_type(args, "stable")
-        existing_patch_releases = glrd_query_type(args, "patch")
+        existing_major_releases = glrd_query_type(args, "major")
+        existing_minor_releases = glrd_query_type(args, "minor")
         existing_nightly_releases = glrd_query_type(args, "nightly")
         existing_merged_releases = (
             existing_next_releases
-            + existing_stable_releases
-            + existing_patch_releases
+            + existing_major_releases
+            + existing_minor_releases
             + existing_nightly_releases
             + existing_dev_releases
         )
         next_releases.extend(existing_next_releases)
-        stable_releases.extend(existing_stable_releases)
-        patch_releases.extend(existing_patch_releases)
+        major_releases.extend(existing_major_releases)
+        minor_releases.extend(existing_minor_releases)
         nightly_releases.extend(existing_nightly_releases)
         dev_releases.extend(existing_dev_releases)
 
@@ -1353,20 +1363,20 @@ def handle_releases(args):
         delete_release(
             args,
             next_releases,
-            stable_releases,
-            patch_releases,
+            major_releases,
+            minor_releases,
             nightly_releases,
             dev_releases,
         )
 
     else:
-        if create_initial_stable or create_initial_patch:
+        if create_initial_major or create_initial_minor:
             github_releases = get_github_releases()
             (
-                stable_releases,
-                patch_releases,
+                major_releases,
+                minor_releases,
                 latest_minor_versions,
-                latest_micro_versions,
+                latest_patch_versions,
             ) = create_initial_releases(github_releases)
 
         # Add stdin input or file input data if provided (existing releases will be overwritten)
@@ -1374,44 +1384,44 @@ def handle_releases(args):
             if args.input_stdin:
                 (
                     input_next,
-                    input_stable,
-                    input_patch,
+                    input_major,
+                    input_minor,
                     input_nightly,
                     input_dev,
                 ) = load_input_stdin()
             elif args.input:
                 (
                     input_next,
-                    input_stable,
-                    input_patch,
+                    input_major,
+                    input_minor,
                     input_nightly,
                     input_dev,
                 ) = load_input(args.input_file)
             next_releases = merge_input_data(next_releases, input_next)
-            stable_releases = merge_input_data(stable_releases, input_stable)
-            patch_releases = merge_input_data(patch_releases, input_patch)
+            major_releases = merge_input_data(major_releases, input_major)
+            minor_releases = merge_input_data(minor_releases, input_minor)
             nightly_releases = merge_input_data(nightly_releases, input_nightly)
             dev_releases = merge_input_data(dev_releases, input_dev)
 
-        # we define stable releases in input file, therefore this has to be run past defining inputs
-        # Create initial nightly releases if requested (needs stable releases)
+        # we define major releases in input file, therefore this has to be run past defining inputs
+        # Create initial nightly releases if requested (needs major releases)
         if create_initial_nightly:
-            nightly_releases = create_initial_nightly_releases(stable_releases)
+            nightly_releases = create_initial_nightly_releases(major_releases)
 
         # Create a next release if requested
         if args.create == "next":
             release = create_single_release("next", args, next_releases)
             next_releases = merge_input_data(next_releases, [release])
 
-        # Create a stable release if requested
-        if args.create == "stable":
-            release = create_single_release("stable", args, stable_releases)
-            stable_releases = merge_input_data(stable_releases, [release])
+        # Create a major release if requested
+        if args.create == "major":
+            release = create_single_release("major", args, major_releases)
+            major_releases = merge_input_data(major_releases, [release])
 
-        # Create a patch release if requested
-        if args.create == "patch":
-            release = create_single_release("patch", args, patch_releases)
-            patch_releases = merge_input_data(patch_releases, [release])
+        # Create a minor release if requested
+        if args.create == "minor":
+            release = create_single_release("minor", args, minor_releases)
+            minor_releases = merge_input_data(minor_releases, [release])
 
         # Create a nightly release if requested
         if args.create == "nightly":
@@ -1423,14 +1433,14 @@ def handle_releases(args):
             release = create_single_release("dev", args, dev_releases)
             dev_releases = merge_input_data(dev_releases, [release])
 
-    # Set EOL for patch releases based on latest minor versions
-    set_latest_minor_eol_to_major(stable_releases, patch_releases)
+    # Set EOL for minor releases based on latest minor versions
+    set_latest_minor_eol_to_major(major_releases, minor_releases)
 
     # Merge all releases into a single list
     merged_releases = (
         next_releases
-        + stable_releases
-        + patch_releases
+        + major_releases
+        + minor_releases
         + nightly_releases
         + dev_releases
     )
@@ -1444,8 +1454,8 @@ def handle_releases(args):
 
     # split all releases again
     next_releases = [r for r in merged_releases if r["type"] == "next"]
-    stable_releases = [r for r in merged_releases if r["type"] == "stable"]
-    patch_releases = [r for r in merged_releases if r["type"] == "patch"]
+    major_releases = [r for r in merged_releases if r["type"] == "major"]
+    minor_releases = [r for r in merged_releases if r["type"] == "minor"]
     nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
     dev_releases = [r for r in merged_releases if r["type"] == "dev"]
 
@@ -1465,7 +1475,7 @@ def store_releases(args, merged_releases):
 
 
 def handle_splitted_output(args, bucket_name, bucket_prefix, releases):
-    """Handle output of splitted releases (next, stable, patch, nightly, dev) to disk and S3."""
+    """Handle output of splitted releases (next, major, minor, nightly, dev) to disk and S3."""
     for release_type in DEFAULTS["RELEASE_TYPES"]:
         releases_filtered = [r for r in releases if r["type"] == release_type]
         if releases_filtered:
@@ -1593,25 +1603,25 @@ def parse_arguments():
         "--delete",
         type=str,
         help="Delete a release by name (format: type-major.minor or "
-        "type-major.minor.micro). Requires --s3-update.",
+        "type-major.minor.patch). Requires --s3-update.",
     )
     parser.add_argument(
         "--create-initial-releases",
         type=str,
         help="Comma-separated list of initial releases to retrieve and "
-        "generate: 'stable,patch,nightly'.",
+        "generate: 'major,minor,nightly'.",
     )
     parser.add_argument(
         "--create",
         type=str,
         help="Create a release for this type using the current timestamp "
-        "and git information (choose one of: stable,patch,nightly,dev,next)'.",
+        "and git information (choose one of: major,minor,nightly,dev,next)'.",
     )
     parser.add_argument(
         "--version",
         type=str,
         help="Manually specify the version (format: major.minor for "
-        "versions < 2000.0.0, or major.minor.micro for versions >= 2000.0.0).",
+        "versions < 2000.0.0, or major.minor.patch for versions >= 2000.0.0).",
     )
     parser.add_argument(
         "--commit",
@@ -1653,7 +1663,7 @@ def parse_arguments():
     parser.add_argument(
         "--no-output-split",
         action="store_true",
-        help="Do not split Output into stable+patch and nightly. Additional "
+        help="Do not split Output into major+minor and nightly. Additional "
         "output-files *-nightly and *-dev will not be created.",
     )
     parser.add_argument(

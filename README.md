@@ -25,7 +25,7 @@ For a general overview about Garden Linux releases and their lifecycle, have a l
 
 ## Overview
 
-The GLRD provides a structured way to store and access release data for Garden Linux, including different release types such as stable, patch, nightly, and development releases. It uses JSON and YAML formats to store release information and supports integration with AWS S3 for storage to host release data..
+The GLRD provides a structured way to store and access release data for Garden Linux, including different release types such as major, minor, nightly, and development releases. It uses JSON and YAML formats to store release information and supports integration with AWS S3 for storage to host release data..
 
 ![Overview](assets/overview.png)
 
@@ -92,12 +92,12 @@ podman run -it --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION
   <summary>Details</summary>
 
 ```
-  - name: Get latest GL patch version
+  - name: Get latest GL minor version
     id: gl_version_latest
     uses: gardenlinux/glrd@main
     with:
-      cmd: glrd --no-header --type patch --latest --fields Version
-  - name: Use latest GL patch version
+      cmd: glrd --no-header --type minor --latest --fields Version
+  - name: Use latest GL minor version
     run: echo ${{ steps.gl_version_latest.outputs.result }}
 
   - name: Get latest GL nightly version
@@ -120,16 +120,16 @@ You can manually query the release JSON data by getting them from our production
 
 Query the release type that you want:
 
-- `releases-stable.json`
-- `releases-patch.json`
+- `releases-major.json`
+- `releases-minor.json`
 - `releases-nightly.json`
 - `releases-dev.json`
 
-To e.g. query the stable releases:
+To e.g. query the major releases:
 
 ```bash
-❯ curl -s https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com/releases-stable.json
-{"releases":[{"name":"stable-27","type":"stable","version":{"major":27},"lifecycle":{"released":{"isodate":"2020-06-09","timestamp":1591694693},"extended":{"isodate":"2020-12-09","timestamp":1607472000},"eol":{"isodate":"2021-03-09","timestamp":1615248000}}},{"name":"stable-184","type":"stable","version":{"major":184},"lifecycle":{"released":{"isodate":"2020-10-29","timestamp":1603984625},"extended":{"isodate":"2020-04-29","timestamp":1588118400},"eol":{"isodate":"2021-07-29","timestamp":1627516800}}},{"name":"stable-318","type":"stable","version":{"major":318},"lifecycle":{"released":{"isodate":"2021-04-28","timestamp":1619614135},"extended":{"isodate":"2021-10-28","timestamp":1635379200},"eol":{"isodate":"2023-01-28","timestamp":1674864000}}},{"name":"stable-576","type":"stable","version":{"major":576},"lifecycle":{"released":{"isodate":"2021-11-17","timestamp":1637142852},"extended":{"isodate":"2023-05-17","timestamp":1684281600},"eol":{"isodate":"2023-08-17","timestamp":1692230400}}},{"name":"stable-934","type":"stable","version":{"major":934},"lifecycle":{"released":{"isodate":"2023-06-05","timestamp":1685968163},"extended":{"isodate":"2023-12-05","timestamp":1701734400},"eol":{"isodate":"2024-03-05","timestamp":1709596800}}},{"name":"stable-1312","type":"stable","version":{"major":1312},"lifecycle":{"released":{"isodate":"2023-11-16","timestamp":1700136050},"extended":{"isodate":"2024-05-03","timestamp":1714694400},"eol":{"isodate":"2024-08-03","timestamp":1722643200}}},{"name":"stable-1443","type":"stable","version":{"major":1443},"lifecycle":{"released":{"isodate":"2024-03-13","timestamp":1710341636},"extended":{"isodate":"2024-09-13","timestamp":1726185600},"eol":{"isodate":"2025-01-13","timestamp":1736726400}}},{"name":"stable-1592","type":"stable","version":{"major":1592},"lifecycle":{"released":{"isodate":"2024-08-12","timestamp":1723457202},"extended":{"isodate":"2025-05-12","timestamp":1747008000},"eol":{"isodate":"2025-08-12","timestamp":1754956800}}}]}
+❯ curl -s https://gardenlinux-glrd.s3.eu-central-1.amazonaws.com/releases-major.json
+{"releases":[{"name":"major-27","type":"major","version":{"major":27},"lifecycle":{"released":{"isodate":"2020-06-09","timestamp":1591694693},"extended":{"isodate":"2020-12-09","timestamp":1607472000},"eol":{"isodate":"2021-03-09","timestamp":1615248000}}},{"name":"major-184","type":"major","version":{"major":184},"lifecycle":{"released":{"isodate":"2020-10-29","timestamp":1603984625},"extended":{"isodate":"2020-04-29","timestamp":1588118400},"eol":{"isodate":"2021-07-29","timestamp":1627516800}}},{"name":"major-318","type":"major","version":{"major":318},"lifecycle":{"released":{"isodate":"2021-04-28","timestamp":1619614135},"extended":{"isodate":"2021-10-28","timestamp":1635379200},"eol":{"isodate":"2023-01-28","timestamp":1674864000}}},{"name":"major-576","type":"major","version":{"major":576},"lifecycle":{"released":{"isodate":"2021-11-17","timestamp":1637142852},"extended":{"isodate":"2023-05-17","timestamp":1684281600},"eol":{"isodate":"2023-08-17","timestamp":1692230400}}},{"name":"major-934","type":"major","version":{"major":934},"lifecycle":{"released":{"isodate":"2023-06-05","timestamp":1685968163},"extended":{"isodate":"2023-12-05","timestamp":1701734400},"eol":{"isodate":"2024-03-05","timestamp":1709596800}}},{"name":"major-1312","type":"major","version":{"major":1312},"lifecycle":{"released":{"isodate":"2023-11-16","timestamp":1700136050},"extended":{"isodate":"2024-05-03","timestamp":1714694400},"eol":{"isodate":"2024-08-03","timestamp":1722643200}}},{"name":"major-1443","type":"major","version":{"major":1443},"lifecycle":{"released":{"isodate":"2024-03-13","timestamp":1710341636},"extended":{"isodate":"2024-09-13","timestamp":1726185600},"eol":{"isodate":"2025-01-13","timestamp":1736726400}}},{"name":"major-1592","type":"major","version":{"major":1592},"lifecycle":{"released":{"isodate":"2024-08-12","timestamp":1723457202},"extended":{"isodate":"2025-05-12","timestamp":1747008000},"eol":{"isodate":"2025-08-12","timestamp":1754956800}}}]}
 ```
 
 </details>
@@ -163,7 +163,7 @@ options:
                         Specify if the input type (default: url).
   --input-url INPUT_URL
                         Input URL to the releases data. Defaults to gardenlinux-glrd S3 URL.
-  --no-input-split      Do not split Input into stable+patch and nightly. No additional input-files *-nightly and *-dev will be parsed.
+  --no-input-split      Do not split Input into major+minor and nightly. No additional input-files *-nightly and *-dev will be parsed.
   --output-format {json,yaml,markdown,mermaid_gantt,shell}
                         Output format: json, yaml, markdown, mermaid_gantt, shell (default).
   --output-description OUTPUT_DESCRIPTION
@@ -171,8 +171,8 @@ options:
   --active              Show only active releases.
   --archived            Show only archived releases.
   --latest              Show the latest active major.minor release.
-  --type TYPE           Filter by release types (comma-separated list, default: stable,patch). E.g., --type stable,patch,nightly,dev,next
-  --version VERSION     Filter by a specific version (major, major.minor, or major.minor.micro). E.g., --version 1312, --version 1312.0, or --version 2000.0.0
+  --type TYPE           Filter by release types (comma-separated list, default: major,minor). E.g., --type major,minor,nightly,dev,next
+  --version VERSION     Filter by a specific version (major, major.minor, or major.minor.patch). E.g., --version 1312, --version 1312.0, or --version 2000.0.0
   --fields FIELDS       Comma-separated list of fields to output. Possible fields: Name,Version,Type,GitCommit,GitCommitShort,ReleaseDate,ReleaseTime,ExtendedMaintenance,EndOfMaintenance,Flavors,OCI,AttributesSourceRepo (default: Name,Version,Type,GitCommitShort,ReleaseDate,ExtendedMaintenance,EndOfMaintenance)
   --no-header           Omit the header in shell output.
   -V                    show program's version number and exit
@@ -186,7 +186,7 @@ options:
 # default shell output
 ❯ glrd --latest
 Name            Version  Type    GitCommitShort    ReleaseDate    ExtendedMaintenance    EndOfMaintenance
-patch-1592.6     1592.6  patch   cb05e11f          2025-02-19     N/A                    2025-08-12
+minor-1592.6     1592.6  minor   cb05e11f          2025-02-19     N/A                    2025-08-12
 ```
 
 #### Get only version field
@@ -206,12 +206,12 @@ patch-1592.6     1592.6  patch   cb05e11f          2025-02-19     N/A           
 {
   "releases": [
     {
-      "name": "patch-1592.6",
-      "type": "patch",
+      "name": "minor-1592.6",
+      "type": "minor",
       "version": {
         "major": 1592,
         "minor": 6
-        // Note: micro field is only present for versions ≥ 2000.0.0
+        // Note: patch field is only present for versions ≥ 2000.0.0
       },
       "lifecycle": {
         "released": {
@@ -410,23 +410,23 @@ patch-1592.6     1592.6  patch   cb05e11f          2025-02-19     N/A           
 1592.6
 ```
 
-**Note**: For versions ≥ 2000.0.0, you can also filter by micro version: `jq -r '.releases[] | "\(.version.major).\(.version.minor).\(.version.micro)"'`
+**Note**: For versions ≥ 2000.0.0, you can also filter by patch version: `jq -r '.releases[] | "\(.version.major).\(.version.minor).\(.version.patch)"'`
 
 ### Get all active and supported Garden Linux Versions
 
 ```
 ❯ glrd --active
 Name                	Version             	Type                	Git Commit          	Release date        	Extended maintenance	End of maintenance
-stable-1443         	1443                	stable              	N/A                 	2024-03-13          	2024-09-13          	2025-01-13
-patch-1443.15       	1443.15             	patch               	5d33a69             	2024-10-10          	N/A                 	2025-01-13
-stable-1592         	1592                	stable              	N/A                 	2024-08-12          	2025-05-12          	2025-08-12
-patch-1592.1        	1592.1              	patch               	ec945aa             	2024-08-22          	N/A                 	2025-08-12
+major-1443         	1443                	major              	N/A                 	2024-03-13          	2024-09-13          	2025-01-13
+minor-1443.15       	1443.15             	minor               	5d33a69             	2024-10-10          	N/A                 	2025-01-13
+major-1592         	1592                	major              	N/A                 	2024-08-12          	2025-05-12          	2025-08-12
+minor-1592.1        	1592.1              	minor               	ec945aa             	2024-08-22          	N/A                 	2025-08-12
 ```
 
 ### Create [Mermaid Gantt Chart](https://mermaid.js.org/syntax/gantt.html) for active releases
 
 ```
-❯ glrd --active --type next,stable --output-format mermaid_gantt --output-description "Garden Linux active Releases"
+❯ glrd --active --type next,major --output-format mermaid_gantt --output-description "Garden Linux active Releases"
 gantt
     title Garden Linux active Releases
     axisFormat %m.%y
@@ -481,9 +481,9 @@ options:
                         Prefix for S3 bucket objects. Defaults to empty string.
   --delete DELETE       Delete a release by name (format: type-major.minor). Requires --s3-update.
   --create-initial-releases CREATE_INITIAL_RELEASES
-                        Comma-separated list of initial releases to retrieve and generate: 'stable,patch,nightly'.
-  --create CREATE       Create a release for this type using the current timestamp and git information (choose one of: stable,patch,nightly,dev,next)'.
-  --version VERSION     Manually specify the version (format: major.minor for versions < 2000.0.0, major.minor.micro for versions ≥ 2000.0.0).
+                        Comma-separated list of initial releases to retrieve and generate: 'major,minor,nightly'.
+  --create CREATE       Create a release for this type using the current timestamp and git information (choose one of: major,minor,nightly,dev,next)'.
+  --version VERSION     Manually specify the version (format: major.minor for versions < 2000.0.0, major.minor.patch for versions ≥ 2000.0.0).
   --commit COMMIT       Manually specify the git commit hash (40 characters).
   --lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME
                         Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
@@ -494,7 +494,7 @@ options:
   --no-query            Do not query and use existing releases using glrd command. Be careful, this can delete your releases.
   --input-stdin         Process a single input from stdin (JSON data).
   --input               Process input from --input-file.
-  --no-output-split     Do not split Output into stable+patch and nightly. Additional output-files *-nightly and *-dev will not be created.
+  --no-output-split     Do not split Output into major+minor and nightly. Additional output-files *-nightly and *-dev will not be created.
   --s3-create-bucket    Create an S3 bucket.
   --s3-update           Update (merge) the generated files with S3.
   --output-all          Download and write all release files found in S3 to local disk
@@ -512,15 +512,15 @@ Without passing `--s3-update`, no actual update will be made and changes can saf
 
 This will generate the following initial release data ...
 
-- stable releases
-- patch releases
+- major releases
+- minor releases
 - nightly releases
 - releases from `releases-input.yaml` (contain manual lifecycle fields)
 
 ... and upload it to the default S3 bucket (if `--s3-update` is passed).
 
 ```
-❯ glrd-manage --create-initial-releases stable,patch,nightly --input
+❯ glrd-manage --create-initial-releases major,minor,nightly --input
 ```
 
 ### Generate/Update an arbitrary release from JSON/YAML data
@@ -531,8 +531,8 @@ This will generate/update a release from JSON data and upload it to the default 
 ❯ echo '{
   "releases": [
     {
-      "name": "patch-1592.1",
-      "type": "patch",
+      "name": "minor-1592.1",
+      "type": "minor",
       "version": {
         "major": 1592,
         "minor": 1
@@ -573,8 +573,8 @@ Another approach is writing release YAML data to an input file and use this file
 ```
 ❯ cat releases-input.yaml
 releases:
-  - name: patch-1592.1
-    type: patch
+  - name: minor-1592.1
+    type: minor
     version:
       major: 1592
       minor: 1
@@ -601,31 +601,31 @@ releases:
 ❯ glrd-manage --input --input-file releases-input.yaml
 ```
 
-### Create or update a stable release
+### Create or update a major release
 
-https://github.com/gardenlinux/glrd?tab=readme-ov-file#default-stable-dates
-When creating a new stable release, [Default Stable dates](#default-stable-dates) can be automatically set for you. In addition to that, you can also overwrite the dates by hand.
+https://github.com/gardenlinux/glrd?tab=readme-ov-file#default-major-dates
+When creating a new major release, [Default Major dates](#default-major-dates) can be automatically set for you. In addition to that, you can also overwrite the dates by hand.
 
 ```
 # use default dates
-❯ glrd-manage --create stable --version 1312
+❯ glrd-manage --create major --version 1312
 
 # overwrite default dates
-❯ glrd-manage --create stable --version 1312 --date-time-released 2023-11-16T00:00:00 --date-time-extended 2024-05-03T00:00:00 --date-time-eol 2024-08-03T00:00:00
+❯ glrd-manage --create major --version 1312 --date-time-released 2023-11-16T00:00:00 --date-time-extended 2024-05-03T00:00:00 --date-time-eol 2024-08-03T00:00:00
 ```
 
-### Create or update a patch release
+### Create or update a minor release
 
-When creating a new patch release, the previous patch release of the same major release gets automatically updated. See [Lifecycle Dependencies](#stable-and-patch-releases) for details.
+When creating a new minor release, the previous minor release of the same major release gets automatically updated. See [Lifecycle Dependencies](#major-and-minor-releases) for details.
 
 ```
-# create new patch
-❯ glrd-manage --create patch --version 1312.7
+# create new minor
+❯ glrd-manage --create minor --version 1312.7
 ```
 
 ### Create a new nightly release
 
-Without any additional parameters, the current timestamp and git information will be used to create releases. For patch, nightly and dev releases, the next free minor version is automatically chosen.
+Without any additional parameters, the current timestamp and git information will be used to create releases. For minor, nightly and dev releases, the next free minor version is automatically chosen.
 
 ```
 ❯ glrd-manage --create nightly
@@ -633,23 +633,23 @@ Without any additional parameters, the current timestamp and git information wil
 
 ## Release Schema
 
-The Garden Linux Release Database (GLRD) uses structured JSON schemas to represent different types of releases: **stable**, **patch**, **nightly**, and **development** releases. Each release type has specific fields that capture essential information about the release.
+The Garden Linux Release Database (GLRD) uses structured JSON schemas to represent different types of releases: **major**, **minor**, **nightly**, and **development** releases. Each release type has specific fields that capture essential information about the release.
 
 ### Versioning Scheme
 
 Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gardenlinux/issues/3069) in [TODO!!! name commit !!!]. GLRD supports both versioning schemes based on the major version number:
 
 - **v1: Versions < 2000.0.0**: Use the `major.minor` format (e.g., `27.0`, `1592.6`)
-- **v2: Versions ≥ 2000.0.0**: Use the `major.minor.micro` format (e.g., `2000.0.0`, `2222.1.5`)
+- **v2: Versions ≥ 2000.0.0**: Use the `major.minor.patch` format (e.g., `2000.0.0`, `2222.1.5`)
 
-### Stable Releases
+### Major Releases
 
-[Stable releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#stable-releases) are major releases that are supported over an extended period of time.
+[Major releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#major-releases) are major releases that are supported over an extended period of time.
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `stable-1312`).
-- **`type`**: `stable`.
+- **`name`**: A string representing the release name (e.g., `major-1312`).
+- **`type`**: `major`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number (e.g. `1312`).
 - **`lifecycle`**:
@@ -663,18 +663,18 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
     - **`isodate`**: End-of-life date in ISO format.
     - **`timestamp`**: UNIX timestamp for the end-of-life date.
 
-### Patch Releases
+### Minor Releases
 
-[Patch Releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#patches) are updates delivered during the standard and extended mainteance periods of [Stable releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#stable-releases).
+[Minor Releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#minores) are updates delivered during the standard and extended mainteance periods of [Major releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#major-releases).
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `patch-1312.1` for v1 versions, `patch-2000.0.0` for v2 versions).
-- **`type`**: `patch`.
+- **`name`**: A string representing the release name (e.g., `minor-1312.1` for v1 versions, `minor-2000.0.0` for v2 versions).
+- **`type`**: `minor`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number (e.g. `1312`).
   - **`minor`**: An integer indicating the minor version number (e.g. `1`).
-  - **`micro`**: An integer indicating the micro version number (only present for versions ≥ 2000.0.0, e.g. `0`).
+  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2000.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -702,7 +702,7 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 - **`version`**:
   - **`major`**: An integer indicating the major version number.
   - **`minor`**: An integer indicating the minor version number.
-  - **`micro`**: An integer indicating the micro version number (only present for versions ≥ 2000.0.0, e.g. `0`).
+  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2000.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -716,7 +716,7 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 
 ### Development Releases
 
-[Development releases](TODO: define and link) are used for testing and development purposes, representing the latest changes that may not yet be included in a stable or patch release. These can be manually created by developers.
+[Development releases](TODO: define and link) are used for testing and development purposes, representing the latest changes that may not yet be included in a major or minor release. These can be manually created by developers.
 
 #### Schema Fields
 
@@ -725,7 +725,7 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 - **`version`**:
   - **`major`**: An integer indicating the major version number.
   - **`minor`**: An integer indicating the minor version number.
-  - **`micro`**: An integer indicating the micro version number (only present for versions ≥ 2000.0.0, e.g. `0`).
+  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2000.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -762,7 +762,7 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 
 The lifecycle fields in the release schemas help track the release dates, extended maintenance dates and end-of-life (EOL) dates for each release.
 
-#### Default Stable dates
+#### Default Major dates
 
 The defaults for `extended` and `eol` dates are based on the [Garden Linux Release Plan Overview](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md) and defined to be:
 
@@ -773,41 +773,41 @@ The defaults for `extended` and `eol` dates are based on the [Garden Linux Relea
 
 For example:
 
-- **Stable Release `stable-1443`**:
+- **Major Release `major-1443`**:
   - `released`: 2024-03-13
   - `extended`: 2024-09-13
   - `eol`: 2025-01-13
 
-#### Stable and Patch releases
+#### Major and Minor releases
 
-There is a dependency between the `lifecycle` fields of **stable** and **patch** releases:
+There is a dependency between the `lifecycle` fields of **major** and **minor** releases:
 
-- **EOL of Patch Releases**: The `eol` date of a patch release is set to the `released` date of the next patch release. If there is no subsequent patch release, the `eol` date is aligned with the `eol` date of the corresponding stable release.
-- **EOL of Latest Patch Release**: The latest patch release's `eol` date matches the `eol` date of the stable release.
-- **EOL of Stable Releases**: The `eol` date for a stable release marks the end of support for that major version.
+- **EOL of Minor Releases**: The `eol` date of a minor release is set to the `released` date of the next minor release. If there is no subsequent minor release, the `eol` date is aligned with the `eol` date of the corresponding major release.
+- **EOL of Latest Minor Release**: The latest minor release's `eol` date matches the `eol` date of the major release.
+- **EOL of Major Releases**: The `eol` date for a major release marks the end of support for that major version.
 
 This ensures that all minor updates within a major release adhere to the same overall support timeline.
 
 For example:
 
-- **Stable Release `stable-1312`**:
+- **Major Release `major-1312`**:
   - `released`: 2023-11-16
   - `extended`: 2024-05-03
   - `eol`: 2024-08-03
-- **Patch Release `patch-1312.1`**:
+- **Minor Release `minor-1312.1`**:
   - `released`: 2023-11-23
-  - `eol`: 2024-01-15 (next patch release date)
-- **Patch Release `patch-1312.2`**:
+  - `eol`: 2024-01-15 (next minor release date)
+- **Minor Release `minor-1312.2`**:
   - `released`: 2024-01-15
-  - `eol`: 2024-02-14 (next patch release date)
+  - `eol`: 2024-02-14 (next minor release date)
 - ...
-- **Patch Release `patch-1312.7`**:
+- **Minor Release `minor-1312.7`**:
   - `released`: 2024-07-03
-  - `eol`: 2024-08-03 (inherits from stable release eol)
+  - `eol`: 2024-08-03 (inherits from major release eol)
 
-In this example, the `eol` of `patch-1312.1` is set to the `released` date of `patch-1312.2`, and the `eol` of the latest patch release (`patch-1312.7`) is set to the `eol` of the stable release (`patch-1312`).
+In this example, the `eol` of `minor-1312.1` is set to the `released` date of `minor-1312.2`, and the `eol` of the latest minor release (`minor-1312.7`) is set to the `eol` of the major release (`minor-1312`).
 
-Please note that the `extended` lifecycle field is not taken into account for patch releases. This is simply an administrative date that has no technical implications.
+Please note that the `extended` lifecycle field is not taken into account for minor releases. This is simply an administrative date that has no technical implications.
 
 #### Nightly an Dev dates
 

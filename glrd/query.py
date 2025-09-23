@@ -51,25 +51,25 @@ def get_version_string(version, release_type=None):
     Return a version string from a version object, respecting versioned schemas.
 
     Args:
-        version: Version object containing major, minor, and optionally micro fields
-        release_type: Type of release (stable, patch, nightly, dev, next)
+        version: Version object containing major, minor, and optionally patch fields
+        release_type: Type of release (major, minor, nightly, dev, next)
 
     Returns:
         Formatted version string appropriate for the release type and version
     """
-    if release_type in ["stable", "next"]:
-        return str(version["major"])  # Stable releases show only major version
+    if release_type in ["major", "next"]:
+        return str(version["major"])  # Major releases show only major version
 
-    # For patch, nightly, and dev releases, determine format based on version number
+    # For minor, nightly, and dev releases, determine format based on version number
     major = version.get("major", 0)
     minor = version.get("minor", 0)
-    micro = version.get("micro", 0)
+    patch = version.get("patch", 0)
 
-    # Use v2 schema format (with micro) for versions >= 2000.0.0
+    # Use v2 schema format (with patch) for versions >= 2000.0.0
     if major >= 2000:
-        return f"{major}.{minor}.{micro}"
+        return f"{major}.{minor}.{patch}"
     else:
-        # Use v1 schema format (without micro) for versions < 2000.0.0
+        # Use v1 schema format (without patch) for versions < 2000.0.0
         return f"{major}.{minor}"
 
 
@@ -110,7 +110,7 @@ def filter_releases(releases, release_types=None, version=None):
     Args:
         releases: List of release objects to filter
         release_types: Comma-separated string of release types to include
-        version: Version string in format major.minor.micro (micro is optional)
+        version: Version string in format major.minor.patch (patch is optional)
 
     Returns:
         Filtered list of releases
@@ -119,14 +119,14 @@ def filter_releases(releases, release_types=None, version=None):
         version_parts = version.split(".")
         major = int(version_parts[0])
         minor = int(version_parts[1]) if len(version_parts) > 1 else None
-        micro = int(version_parts[2]) if len(version_parts) > 2 else None
+        patch = int(version_parts[2]) if len(version_parts) > 2 else None
 
         releases = [
             r
             for r in releases
             if r["version"]["major"] == major
             and (minor is None or r["version"].get("minor", 0) == minor)
-            and (micro is None or r["version"].get("micro", 0) == micro)
+            and (patch is None or r["version"].get("patch", 0) == patch)
         ]
 
     if release_types:
@@ -152,13 +152,13 @@ def find_latest_release(releases):
         version = release["version"]
         major = version["major"]
         minor = version.get("minor", 0)
-        micro = version.get("micro", 0)
+        patch = version.get("patch", 0)
 
-        # For versions >= 2000.0.0, include micro in comparison
+        # For versions >= 2000.0.0, include patch in comparison
         if major >= 2000:
-            return (major, minor, micro)
+            return (major, minor, patch)
         else:
-            # For versions < 2000.0.0, exclude micro from comparison
+            # For versions < 2000.0.0, exclude patch from comparison
             return (major, minor, 0)
 
     return max(releases, key=get_version_key, default=None)
@@ -388,14 +388,14 @@ def sort_releases(releases):
         version = r["version"]
         major = parse_version_part(version.get("major"))
         minor = parse_version_part(version.get("minor", -1))
-        micro = parse_version_part(version.get("micro", -1))
+        patch = parse_version_part(version.get("patch", -1))
 
-        # For versions >= 2000.0.0, include micro in sorting
+        # For versions >= 2000.0.0, include patch in sorting
         if isinstance(major, int) and major >= 2000:
-            return (major, minor, micro)
+            return (major, minor, patch)
         else:
             # For versions < 2000.0.0 or non-integer majors (like 'next'),
-            # exclude micro from sorting
+            # exclude patch from sorting
             return (major, minor, 0)
 
     return sorted(releases, key=sort_key)
@@ -425,8 +425,8 @@ def load_split_releases(
     """Load and split releases based on type."""
     (
         releases_next,
-        releases_stable,
-        releases_patch,
+        releases_major,
+        releases_minor,
         releases_nightly,
         releases_dev,
     ) = (
@@ -445,17 +445,17 @@ def load_split_releases(
             input_file = input_url + "/" + input_file
         releases_next = load_releases(input_file, is_url=is_url).get("releases", [])
 
-    if "stable" in types:
-        input_file = input_file_prefix + "-stable" + "." + input_format
+    if "major" in types:
+        input_file = input_file_prefix + "-major" + "." + input_format
         if is_url:
             input_file = input_url + "/" + input_file
-        releases_stable = load_releases(input_file, is_url=is_url).get("releases", [])
+        releases_major = load_releases(input_file, is_url=is_url).get("releases", [])
 
-    if "patch" in types:
-        input_file = input_file_prefix + "-patch" + "." + input_format
+    if "minor" in types:
+        input_file = input_file_prefix + "-minor" + "." + input_format
         if is_url:
             input_file = input_url + "/" + input_file
-        releases_patch = load_releases(input_file, is_url=is_url).get("releases", [])
+        releases_minor = load_releases(input_file, is_url=is_url).get("releases", [])
 
     if "nightly" in types:
         input_file = input_file_prefix + "-nightly" + "." + input_format
@@ -471,8 +471,8 @@ def load_split_releases(
 
     return (
         releases_next
-        + releases_stable
-        + releases_patch
+        + releases_major
+        + releases_minor
         + releases_nightly
         + releases_dev
     )
@@ -540,7 +540,7 @@ def parse_arguments():
     parser.add_argument(
         "--no-input-split",
         action="store_true",
-        help="Do not split Input into stable+patch and nightly. No additional "
+        help="Do not split Input into major+minor and nightly. No additional "
         "input-files *-nightly and *-dev will be parsed.",
     )
 
@@ -570,7 +570,7 @@ def parse_arguments():
     parser.add_argument(
         "--latest",
         action="store_true",
-        help="Show the latest active major.minor.micro release.",
+        help="Show the latest active major.minor.patch release.",
     )
 
     parser.add_argument(
@@ -578,13 +578,13 @@ def parse_arguments():
         type=str,
         default=DEFAULTS["QUERY_TYPE"],
         help="Filter by release types (comma-separated list, default: "
-        "stable,patch). E.g., --type stable,patch,nightly,dev,next",
+        "major,minor). E.g., --type major,minor,nightly,dev,next",
     )
 
     parser.add_argument(
         "--version",
         type=str,
-        help="Filter by a specific version (major or major.minor.micro). "
+        help="Filter by a specific version (major or major.minor.patch). "
         "E.g., --version 1312 or --version 1312.0 or --version 1312.0.0",
     )
 

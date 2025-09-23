@@ -143,8 +143,8 @@ class TestGLRDIntegration:
         assert release["type"] == "nightly"
         assert release["version"]["major"] == int(version.split(".")[0])
         assert release["version"]["minor"] == int(version.split(".")[1])
-        # v1 schema should not have micro field
-        assert "micro" not in release["version"]
+        # v1 schema should not have patch field
+        assert "patch" not in release["version"]
 
     @pytest.mark.parametrize(
         "version",
@@ -155,11 +155,11 @@ class TestGLRDIntegration:
         ],
     )
     def test_v1_schema_invalid_versions(self, test_dir, manage_script, version):
-        """Test v1 schema with invalid version formats (versions < 2000 with micro)."""
+        """Test v1 schema with invalid version formats (versions < 2000 with patch)."""
         prefix = os.path.join(test_dir, f'releases-nightly-{version.replace(".", "_")}')
         output_file = f"{prefix}-nightly.json"
 
-        # Should fail because v1 schema doesn't support micro field
+        # Should fail because v1 schema doesn't support patch field
         result = self.run_manage_command(
             manage_script,
             [
@@ -178,7 +178,7 @@ class TestGLRDIntegration:
 
         # Verify error message mentions v1 schema
         assert "v1 schema" in result.stderr
-        assert "micro version" in result.stderr
+        assert "patch version" in result.stderr
 
         # Verify no output file was created
         assert not os.path.exists(
@@ -233,7 +233,7 @@ class TestGLRDIntegration:
         version_parts = version.split(".")
         assert release["version"]["major"] == int(version_parts[0])
         assert release["version"]["minor"] == int(version_parts[1])
-        assert release["version"]["micro"] == int(version_parts[2])
+        assert release["version"]["patch"] == int(version_parts[2])
 
     @pytest.mark.parametrize(
         "version",
@@ -244,11 +244,11 @@ class TestGLRDIntegration:
         ],
     )
     def test_v2_schema_invalid_versions(self, test_dir, manage_script, version):
-        """Test v2 schema with invalid version formats (versions >= 2000 without micro)."""
+        """Test v2 schema with invalid version formats (versions >= 2000 without patch)."""
         prefix = os.path.join(test_dir, f'releases-nightly-{version.replace(".", "_")}')
         output_file = f"{prefix}-nightly.json"
 
-        # Should fail because v2 schema requires micro field
+        # Should fail because v2 schema requires patch field
         result = self.run_manage_command(
             manage_script,
             [
@@ -267,7 +267,7 @@ class TestGLRDIntegration:
 
         # Verify error message mentions v2 schema
         assert "v2 schema" in result.stderr
-        assert "missing micro version" in result.stderr
+        assert "missing patch version" in result.stderr
 
         # Verify no output file was created
         assert not os.path.exists(
@@ -280,7 +280,7 @@ class TestGLRDIntegration:
         prefix = os.path.join(test_dir, "releases-nightly-boundary")
         output_file = f"{prefix}-nightly.json"
 
-        # This should fail - 2000.0 is missing micro for v2 schema
+        # This should fail - 2000.0 is missing patch for v2 schema
         result = self.run_manage_command(
             manage_script,
             [
@@ -298,7 +298,7 @@ class TestGLRDIntegration:
         )
 
         assert "v2 schema" in result.stderr
-        assert "missing micro version" in result.stderr
+        assert "missing patch version" in result.stderr
 
         # This should succeed - 2000.0.0 is correct v2 format
         self.run_manage_command(
@@ -319,7 +319,7 @@ class TestGLRDIntegration:
         data = self.load_json_output(output_file)
         release = data["releases"][0]
         assert release["name"] == "nightly-2000.0.0"
-        assert release["version"]["micro"] == 0
+        assert release["version"]["patch"] == 0
 
     def test_schema_error_message_clarity(self, test_dir, manage_script):
         """Test that error messages are clear and helpful."""
@@ -341,7 +341,7 @@ class TestGLRDIntegration:
         )
 
         assert "v1 schema" in result.stderr
-        assert "micro version" in result.stderr
+        assert "patch version" in result.stderr
         assert "major.minor" in result.stderr
 
         # Test v2 schema error message
@@ -362,23 +362,23 @@ class TestGLRDIntegration:
         )
 
         assert "v2 schema" in result.stderr
-        assert "missing micro version" in result.stderr
-        assert "major.minor.micro" in result.stderr
+        assert "missing patch version" in result.stderr
+        assert "major.minor.patch" in result.stderr
 
     # ============================================================================
     # RELEASE CREATION TESTS
     # ============================================================================
 
-    def test_stable_release_validation(self, test_dir, manage_script):
-        """Test stable release validation (always uses v1 schema)."""
-        prefix = os.path.join(test_dir, "releases-stable")
-        output_file = f"{prefix}-stable.json"
+    def test_major_release_validation(self, test_dir, manage_script):
+        """Test major release validation (always uses v1 schema)."""
+        prefix = os.path.join(test_dir, "releases-major")
+        output_file = f"{prefix}-major.json"
 
         self.run_manage_command(
             manage_script,
             [
                 "--create",
-                "stable",
+                "major",
                 "--version",
                 "27",
                 "--output-format",
@@ -391,24 +391,24 @@ class TestGLRDIntegration:
 
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "stable-27"
-        assert release["type"] == "stable"
+        assert release["name"] == "major-27"
+        assert release["type"] == "major"
         assert release["version"]["major"] == 27
-        # Stable releases don't have minor/micro in version object
+        # Major releases don't have minor/patch in version object
         assert "minor" not in release["version"]
-        assert "micro" not in release["version"]
+        assert "patch" not in release["version"]
 
-    def test_patch_release_validation(self, test_dir, manage_script):
-        """Test patch release validation with different schema versions."""
-        prefix = os.path.join(test_dir, "releases-patch")
-        output_file = f"{prefix}-patch.json"
+    def test_minor_release_validation(self, test_dir, manage_script):
+        """Test minor release validation with different schema versions."""
+        prefix = os.path.join(test_dir, "releases-minor")
+        output_file = f"{prefix}-minor.json"
 
-        # Test v1 schema patch release - create directly via stdin
-        patch_v1_json = {
+        # Test v1 schema minor release - create directly via stdin
+        minor_v1_json = {
             "releases": [
                 {
-                    "name": "patch-27.0",
-                    "type": "patch",
+                    "name": "minor-27.0",
+                    "type": "minor",
                     "version": {"major": 27, "minor": 0},
                     "lifecycle": {
                         "released": {"isodate": "2020-06-09", "timestamp": 1591694693},
@@ -437,25 +437,25 @@ class TestGLRDIntegration:
                 prefix,
                 "--no-query",
             ],
-            json.dumps(patch_v1_json),
+            json.dumps(minor_v1_json),
         )
 
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "patch-27.0"
-        assert "micro" not in release["version"]
+        assert release["name"] == "minor-27.0"
+        assert "patch" not in release["version"]
 
         # Clean up
         if os.path.exists(output_file):
             os.remove(output_file)
 
-        # Test v2 schema patch release - create directly via stdin
-        patch_v2_json = {
+        # Test v2 schema minor release - create directly via stdin
+        minor_v2_json = {
             "releases": [
                 {
-                    "name": "patch-2000.0.0",
-                    "type": "patch",
-                    "version": {"major": 2000, "minor": 0, "micro": 0},
+                    "name": "minor-2000.0.0",
+                    "type": "minor",
+                    "version": {"major": 2000, "minor": 0, "patch": 0},
                     "lifecycle": {
                         "released": {"isodate": "2025-01-01", "timestamp": 1735689600},
                         "eol": {"isodate": "2025-10-01", "timestamp": 1759363200},
@@ -483,13 +483,13 @@ class TestGLRDIntegration:
                 prefix,
                 "--no-query",
             ],
-            json.dumps(patch_v2_json),
+            json.dumps(minor_v2_json),
         )
 
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "patch-2000.0.0"
-        assert release["version"]["micro"] == 0
+        assert release["name"] == "minor-2000.0.0"
+        assert release["version"]["patch"] == 0
 
     def test_dev_release_validation(self, test_dir, manage_script):
         """Test dev release validation with different schema versions."""
@@ -515,7 +515,7 @@ class TestGLRDIntegration:
         data = self.load_json_output(output_file)
         release = data["releases"][0]
         assert release["name"] == "dev-1990.0"
-        assert "micro" not in release["version"]
+        assert "patch" not in release["version"]
 
         # Clean up
         if os.path.exists(output_file):
@@ -540,7 +540,7 @@ class TestGLRDIntegration:
         data = self.load_json_output(output_file)
         release = data["releases"][0]
         assert release["name"] == "dev-2000.0.0"
-        assert release["version"]["micro"] == 0
+        assert release["version"]["patch"] == 0
 
     # ============================================================================
     # QUERY AND VERIFICATION TESTS
@@ -594,17 +594,17 @@ class TestGLRDIntegration:
         assert release["name"] == "nightly-1990.0"
         assert release["type"] == "nightly"
 
-    def test_query_created_stable_release(self, test_dir, manage_script, query_script):
-        """Create a stable release and query it using glrd."""
-        prefix = os.path.join(test_dir, "releases-stable-ci")
-        output_file = f"{prefix}-stable.json"
+    def test_query_created_major_release(self, test_dir, manage_script, query_script):
+        """Create a major release and query it using glrd."""
+        prefix = os.path.join(test_dir, "releases-major-ci")
+        output_file = f"{prefix}-major.json"
 
-        # Create stable release
+        # Create major release
         self.run_manage_command(
             manage_script,
             [
                 "--create",
-                "stable",
+                "major",
                 "--version",
                 "1312",
                 "--output-format",
@@ -623,7 +623,7 @@ class TestGLRDIntegration:
             query_script,
             [
                 "--type",
-                "stable",
+                "major",
                 "--input-type",
                 "file",
                 "--input-file-prefix",
@@ -636,8 +636,8 @@ class TestGLRDIntegration:
         data = json.loads(result.stdout)
         assert "releases" in data
         assert len(data["releases"]) == 1
-        assert data["releases"][0]["name"] == "stable-1312"
-        assert data["releases"][0]["type"] == "stable"
+        assert data["releases"][0]["name"] == "major-1312"
+        assert data["releases"][0]["type"] == "major"
 
     def test_query_created_dev_release(self, test_dir, manage_script, query_script):
         """Create a dev release and query it using glrd."""
@@ -684,18 +684,18 @@ class TestGLRDIntegration:
         assert data["releases"][0]["name"] == "dev-1990.0"
         assert data["releases"][0]["type"] == "dev"
 
-    def test_create_query_patch_via_input_stdin(
+    def test_create_query_minor_via_input_stdin(
         self, test_dir, manage_script, query_script
     ):
-        """Create a patch release via input-stdin and query it using glrd."""
-        prefix = os.path.join(test_dir, "releases-patch-ci")
-        output_file = f"{prefix}-patch.json"
+        """Create a minor release via input-stdin and query it using glrd."""
+        prefix = os.path.join(test_dir, "releases-minor-ci")
+        output_file = f"{prefix}-minor.json"
 
-        patch_json = {
+        minor_json = {
             "releases": [
                 {
-                    "name": "patch-1592.6",
-                    "type": "patch",
+                    "name": "minor-1592.6",
+                    "type": "minor",
                     "version": {"major": 1592, "minor": 6},
                     "lifecycle": {
                         "released": {
@@ -720,7 +720,7 @@ class TestGLRDIntegration:
             ]
         }
 
-        stdin_payload = json.dumps(patch_json)
+        stdin_payload = json.dumps(minor_json)
 
         # Create via stdin
         self.run_manage_command_stdin(
@@ -744,7 +744,7 @@ class TestGLRDIntegration:
             query_script,
             [
                 "--type",
-                "patch",
+                "minor",
                 "--input-type",
                 "file",
                 "--input-file-prefix",
@@ -757,8 +757,8 @@ class TestGLRDIntegration:
         data = json.loads(result.stdout)
         assert "releases" in data
         assert len(data["releases"]) == 1
-        assert data["releases"][0]["name"] == "patch-1592.6"
-        assert data["releases"][0]["type"] == "patch"
+        assert data["releases"][0]["name"] == "minor-1592.6"
+        assert data["releases"][0]["type"] == "minor"
 
     def test_create_query_next_release(self, test_dir, manage_script, query_script):
         """Create a next release (via stdin for full lifecycle) and query it using glrd."""
@@ -901,14 +901,14 @@ class TestGLRDIntegration:
     def test_update_release_with_custom_lifecycle(self, test_dir, manage_script):
         """Test updating a release with custom lifecycle flags."""
         prefix = os.path.join(test_dir, "releases-custom-lifecycle")
-        output_file = f"{prefix}-stable.json"
+        output_file = f"{prefix}-major.json"
 
-        # Create a stable release with custom lifecycle dates
+        # Create a major release with custom lifecycle dates
         self.run_manage_command(
             manage_script,
             [
                 "--create",
-                "stable",
+                "major",
                 "--version",
                 "9999",
                 "--lifecycle-released-isodatetime",
@@ -929,8 +929,8 @@ class TestGLRDIntegration:
         assert os.path.exists(output_file)
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "stable-9999"
-        assert release["type"] == "stable"
+        assert release["name"] == "major-9999"
+        assert release["type"] == "major"
 
         # Check custom lifecycle dates
         lifecycle = release["lifecycle"]
@@ -1025,15 +1025,15 @@ class TestGLRDIntegration:
         custom_commit = "deadbeef1234567890abcdef1234567890abcdef"
         custom_commit_short = "deadbeef"
 
-        # Test stable release with custom commit
-        stable_prefix = os.path.join(test_dir, "releases-stable-custom-commit")
-        stable_file = f"{stable_prefix}-stable.json"
+        # Test major release with custom commit
+        major_prefix = os.path.join(test_dir, "releases-major-custom-commit")
+        major_file = f"{major_prefix}-major.json"
 
         self.run_manage_command(
             manage_script,
             [
                 "--create",
-                "stable",
+                "major",
                 "--version",
                 "8888",
                 "--commit",
@@ -1041,27 +1041,27 @@ class TestGLRDIntegration:
                 "--output-format",
                 "json",
                 "--output-file-prefix",
-                stable_prefix,
+                major_prefix,
                 "--no-query",
             ],
         )
 
-        assert os.path.exists(stable_file)
-        data = self.load_json_output(stable_file)
+        assert os.path.exists(major_file)
+        data = self.load_json_output(major_file)
         release = data["releases"][0]
-        assert release["name"] == "stable-8888"
-        assert release["type"] == "stable"
-        # Stable releases don't have git commit info in the schema
+        assert release["name"] == "major-8888"
+        assert release["type"] == "major"
+        # Major releases don't have git commit info in the schema
 
-        # Test patch release with custom commit (v1 schema) - use stdin to avoid EOL issues
-        patch_prefix = os.path.join(test_dir, "releases-patch-custom-commit")
-        patch_file = f"{patch_prefix}-patch.json"
+        # Test minor release with custom commit (v1 schema) - use stdin to avoid EOL issues
+        minor_prefix = os.path.join(test_dir, "releases-minor-custom-commit")
+        minor_file = f"{minor_prefix}-minor.json"
 
-        patch_json = {
+        minor_json = {
             "releases": [
                 {
-                    "name": "patch-1990.0",
-                    "type": "patch",
+                    "name": "minor-1990.0",
+                    "type": "minor",
                     "version": {"major": 1990, "minor": 0},
                     "lifecycle": {
                         "released": {"isodate": "2025-01-01", "timestamp": 1735689600},
@@ -1084,17 +1084,17 @@ class TestGLRDIntegration:
                 "--output-format",
                 "json",
                 "--output-file-prefix",
-                patch_prefix,
+                minor_prefix,
                 "--no-query",
             ],
-            json.dumps(patch_json),
+            json.dumps(minor_json),
         )
 
-        assert os.path.exists(patch_file)
-        data = self.load_json_output(patch_file)
+        assert os.path.exists(minor_file)
+        data = self.load_json_output(minor_file)
         release = data["releases"][0]
-        assert release["name"] == "patch-1990.0"
-        assert release["type"] == "patch"
+        assert release["name"] == "minor-1990.0"
+        assert release["type"] == "minor"
         assert release["git"]["commit"] == custom_commit
         assert release["git"]["commit_short"] == custom_commit_short
 

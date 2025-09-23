@@ -65,21 +65,21 @@ def parse_arguments():
     parser.add_argument(
         "--version",
         type=str,
-        help="Only process releases with this version (format: major.minor.micro)",
+        help="Only process releases with this version (format: major.minor.patch)",
     )
 
     parser.add_argument(
-        "--fix-micro-versions",
+        "--fix-patch-versions",
         action="store_true",
         default=True,
-        help="Fix missing micro version fields in release names and version "
+        help="Fix missing patch version fields in release names and version "
         "objects (default: True)",
     )
 
     parser.add_argument(
-        "--no-fix-micro-versions",
+        "--no-fix-patch-versions",
         action="store_true",
-        help="Disable fixing of missing micro version fields",
+        help="Disable fixing of missing patch version fields",
     )
 
     parser.add_argument("-V", action="version", version=f"%(prog)s {get_version()}")
@@ -94,17 +94,17 @@ def parse_arguments():
         try:
             parts = args.version.split(".")
             if len(parts) != 3:
-                raise ValueError("Version must be in format major.minor.micro")
+                raise ValueError("Version must be in format major.minor.patch")
             args.version_major = int(parts[0])
             args.version_minor = int(parts[1])
-            args.version_micro = int(parts[2])
+            args.version_patch = int(parts[2])
         except (ValueError, IndexError) as e:
             logging.error(f"Invalid version format: {e}")
             sys.exit(ERROR_CODES["parameter_missing"])
 
-    # Handle micro version fixing flags
-    if args.no_fix_micro_versions:
-        args.fix_micro_versions = False
+    # Handle patch version fixing flags
+    if args.no_fix_patch_versions:
+        args.fix_patch_versions = False
 
     return args
 
@@ -211,54 +211,54 @@ def update_source_repo_attribute(releases):
     for release in releases:
         major = int(release["version"].get("major", 0))
         minor = int(release["version"].get("minor", 0))
-        micro = int(release["version"].get("micro", 0))
+        patch = int(release["version"].get("patch", 0))
 
-        if (major > 1592) or (major == 1592 and minor >= 4 and micro >= 0):
+        if (major > 1592) or (major == 1592 and minor >= 4 and patch >= 0):
             release["attributes"] = {"source_repo": True}
         else:
             release["attributes"] = {"source_repo": False}
 
 
-def fix_micro_version_fields(releases):
-    """Fix missing micro version fields in releases based on versioned schemas."""
+def fix_patch_version_fields(releases):
+    """Fix missing patch version fields in releases based on versioned schemas."""
     fixed_count = 0
 
     for release in releases:
         release_type = release.get("type")
         version = release.get("version", {})
 
-        # Only fix patch, nightly, and dev releases
-        if release_type in ["patch", "nightly", "dev"]:
+        # Only fix minor, nightly, and dev releases
+        if release_type in ["minor", "nightly", "dev"]:
             major = version.get("major")
             minor = version.get("minor")
-            micro = version.get("micro")
+            patch = version.get("patch")
 
-            # Only add micro field for versions >= 2000.0.0 (v2 schema)
+            # Only add patch field for versions >= 2000.0.0 (v2 schema)
             if major is not None and major >= 2000:
-                # If micro is missing, set it to 0
-                if micro is None:
-                    version["micro"] = 0
-                    micro = 0
+                # If patch is missing, set it to 0
+                if patch is None:
+                    version["patch"] = 0
+                    patch = 0
                     fixed_count += 1
 
-                # Fix the name if it's missing the micro version
+                # Fix the name if it's missing the patch version
                 current_name = release.get("name", "")
-                expected_name = f"{release_type}-{major}.{minor}.{micro}"
+                expected_name = f"{release_type}-{major}.{minor}.{patch}"
 
                 if current_name != expected_name:
                     release["name"] = expected_name
                     fixed_count += 1
                     logging.debug(f"Fixed name: {current_name} -> {expected_name}")
             else:
-                # For versions < 2000.0.0 (v1 schema), ensure micro field is NOT present
-                if "micro" in version:
-                    del version["micro"]
+                # For versions < 2000.0.0 (v1 schema), ensure patch field is NOT present
+                if "patch" in version:
+                    del version["patch"]
                     fixed_count += 1
                     logging.debug(
-                        f"Removed micro field for v1 schema release: {release.get('name', '')}"
+                        f"Removed patch field for v1 schema release: {release.get('name', '')}"
                     )
 
-                # Ensure name doesn't have micro version for v1 schema
+                # Ensure name doesn't have patch version for v1 schema
                 current_name = release.get("name", "")
                 expected_name = f"{release_type}-{major}.{minor}"
 
@@ -317,7 +317,7 @@ def process_releases(args):
     successful_files = []
     total_releases_processed = 0
     total_releases_updated = 0
-    total_micro_fixes = 0
+    total_patch_fixes = 0
 
     for json_file in json_files:
         try:
@@ -328,18 +328,18 @@ def process_releases(args):
                     releases = releases["releases"]
                 logging.info(f"Found {len(releases)} releases in {json_file}")
 
-            # Fix micro version fields first (if enabled)
-            micro_fixes = 0
-            if args.fix_micro_versions:
-                micro_fixes = fix_micro_version_fields(releases)
-                if micro_fixes > 0:
+            # Fix patch version fields first (if enabled)
+            patch_fixes = 0
+            if args.fix_patch_versions:
+                patch_fixes = fix_patch_version_fields(releases)
+                if patch_fixes > 0:
                     logging.info(
-                        f"Fixed {micro_fixes} micro version fields in {json_file}"
+                        f"Fixed {patch_fixes} patch version fields in {json_file}"
                     )
-                    total_micro_fixes += micro_fixes
+                    total_patch_fixes += patch_fixes
 
             # Process each release
-            modified = micro_fixes > 0  # File is modified if micro versions were fixed
+            modified = patch_fixes > 0  # File is modified if patch versions were fixed
             releases_processed = 0
             releases_updated = 0
 
@@ -350,11 +350,11 @@ def process_releases(args):
                 release_name = release.get("name", "unknown")
                 release_type = release.get("type", "unknown")
 
-                # Only process patch, nightly, and dev releases
-                if release_type not in ["patch", "nightly", "dev"]:
+                # Only process minor, nightly, and dev releases
+                if release_type not in ["minor", "nightly", "dev"]:
                     logging.debug(
                         f"Skipping {release_type} release {release_name}: "
-                        f"not a patch/nightly/dev release"
+                        f"not a minor/nightly/dev release"
                     )
                     continue
 
@@ -362,7 +362,7 @@ def process_releases(args):
                 version_info = (
                     f"{version.get('major', '?')}."
                     f"{version.get('minor', '?')}."
-                    f"{version.get('micro', '?')}"
+                    f"{version.get('patch', '?')}"
                 )
 
                 # Skip if version filter is active and doesn't match
@@ -370,7 +370,7 @@ def process_releases(args):
                     if (
                         version.get("major") != args.version_major
                         or version.get("minor") != args.version_minor
-                        or version.get("micro") != args.version_micro
+                        or version.get("patch") != args.version_patch
                     ):
                         logging.debug(
                             f"Skipping {release_type} release {release_name}: "
@@ -456,7 +456,7 @@ def process_releases(args):
     )
     logging.info(f"Total releases processed: {total_releases_processed}")
     logging.info(f"Total releases updated with flavors: {total_releases_updated}")
-    logging.info(f"Total micro version fields fixed: {total_micro_fixes}")
+    logging.info(f"Total patch version fields fixed: {total_patch_fixes}")
 
 
 def main():
