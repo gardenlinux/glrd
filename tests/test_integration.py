@@ -108,7 +108,7 @@ class TestGLRDIntegration:
     def test_v1_schema_valid_versions(
         self, test_dir, manage_script, version, expected_name
     ):
-        """Test v1 schema with valid version formats (versions < 2000)."""
+        """Test v1 schema with valid version formats (versions < 2017)."""
         prefix = os.path.join(test_dir, f'releases-nightly-{version.replace(".", "_")}')
         output_file = f"{prefix}-nightly.json"
 
@@ -155,7 +155,7 @@ class TestGLRDIntegration:
         ],
     )
     def test_v1_schema_invalid_versions(self, test_dir, manage_script, version):
-        """Test v1 schema with invalid version formats (versions < 2000 with patch)."""
+        """Test v1 schema with invalid version formats (versions < 2017 with patch)."""
         prefix = os.path.join(test_dir, f'releases-nightly-{version.replace(".", "_")}')
         output_file = f"{prefix}-nightly.json"
 
@@ -188,7 +188,7 @@ class TestGLRDIntegration:
     @pytest.mark.parametrize(
         "version,expected_name",
         [
-            ("2000.0.0", "nightly-2000.0.0"),
+            ("2017.0.0", "nightly-2017.0.0"),
             ("2222.0.0", "nightly-2222.0.0"),
             ("3000.5.2", "nightly-3000.5.2"),
         ],
@@ -196,7 +196,7 @@ class TestGLRDIntegration:
     def test_v2_schema_valid_versions(
         self, test_dir, manage_script, version, expected_name
     ):
-        """Test v2 schema with valid version formats (versions >= 2000)."""
+        """Test v2 schema with valid version formats (versions >= 2017)."""
         prefix = os.path.join(test_dir, f'releases-nightly-{version.replace(".", "_")}')
         output_file = f"{prefix}-nightly.json"
 
@@ -238,13 +238,13 @@ class TestGLRDIntegration:
     @pytest.mark.parametrize(
         "version",
         [
-            "2000.0",
+            "2017.0",
             "2222.0",
             "3000.5",
         ],
     )
     def test_v2_schema_invalid_versions(self, test_dir, manage_script, version):
-        """Test v2 schema with invalid version formats (versions >= 2000 without patch)."""
+        """Test v2 schema with invalid version formats (versions >= 2017 without patch)."""
         prefix = os.path.join(test_dir, f'releases-nightly-{version.replace(".", "_")}')
         output_file = f"{prefix}-nightly.json"
 
@@ -275,19 +275,19 @@ class TestGLRDIntegration:
         ), f"Output file should not be created for invalid version {version}"
 
     def test_boundary_version_validation(self, test_dir, manage_script):
-        """Test validation at the boundary between v1 and v2 schemas (version 2000)."""
+        """Test validation at the boundary between v1 and v2 schemas (version 2017)."""
         # Test exactly at boundary - should require v2 schema
         prefix = os.path.join(test_dir, "releases-nightly-boundary")
         output_file = f"{prefix}-nightly.json"
 
-        # This should fail - 2000.0 is missing patch for v2 schema
+        # This should fail - 2017.0 is missing patch for v2 schema
         result = self.run_manage_command(
             manage_script,
             [
                 "--create",
                 "nightly",
                 "--version",
-                "2000.0",
+                "2017.0",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -300,14 +300,14 @@ class TestGLRDIntegration:
         assert "v2 schema" in result.stderr
         assert "missing patch version" in result.stderr
 
-        # This should succeed - 2000.0.0 is correct v2 format
+        # This should succeed - 2017.0.0 is correct v2 format
         self.run_manage_command(
             manage_script,
             [
                 "--create",
                 "nightly",
                 "--version",
-                "2000.0.0",
+                "2017.0.0",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -318,7 +318,7 @@ class TestGLRDIntegration:
 
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "nightly-2000.0.0"
+        assert release["name"] == "nightly-2017.0.0"
         assert release["version"]["patch"] == 0
 
     def test_schema_error_message_clarity(self, test_dir, manage_script):
@@ -453,9 +453,9 @@ class TestGLRDIntegration:
         minor_v2_json = {
             "releases": [
                 {
-                    "name": "minor-2000.0.0",
+                    "name": "minor-2017.0.0",
                     "type": "minor",
-                    "version": {"major": 2000, "minor": 0, "patch": 0},
+                    "version": {"major": 2017, "minor": 0, "patch": 0},
                     "lifecycle": {
                         "released": {"isodate": "2025-01-01", "timestamp": 1735689600},
                         "eol": {"isodate": "2025-10-01", "timestamp": 1759363200},
@@ -465,7 +465,7 @@ class TestGLRDIntegration:
                         "commit_short": "2000ae6",
                     },
                     "github": {
-                        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/2000.0.0"
+                        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/2017.0.0"
                     },
                     "flavors": ["container-amd64"],
                     "attributes": {"source_repo": True},
@@ -488,7 +488,7 @@ class TestGLRDIntegration:
 
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "minor-2000.0.0"
+        assert release["name"] == "minor-2017.0.0"
         assert release["version"]["patch"] == 0
 
     def test_dev_release_validation(self, test_dir, manage_script):
@@ -528,7 +528,7 @@ class TestGLRDIntegration:
                 "--create",
                 "dev",
                 "--version",
-                "2000.0.0",
+                "2017.0.0",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -539,7 +539,7 @@ class TestGLRDIntegration:
 
         data = self.load_json_output(output_file)
         release = data["releases"][0]
-        assert release["name"] == "dev-2000.0.0"
+        assert release["name"] == "dev-2017.0.0"
         assert release["version"]["patch"] == 0
 
     # ============================================================================
@@ -834,7 +834,7 @@ class TestGLRDIntegration:
         # Create multiple releases
         releases = [
             ("1990.0", "nightly-1990.0"),  # v1 schema
-            ("2000.0.0", "nightly-2000.0.0"),  # v2 schema
+            ("2017.0.0", "nightly-2017.0.0"),  # v2 schema
         ]
 
         all_releases = []
@@ -892,7 +892,7 @@ class TestGLRDIntegration:
         # Check that both releases are present
         names = [r["name"] for r in query_data["releases"]]
         assert "nightly-1990.0" in names
-        assert "nightly-2000.0.0" in names
+        assert "nightly-2017.0.0" in names
 
     # ============================================================================
     # ADVANCED FEATURE TESTS

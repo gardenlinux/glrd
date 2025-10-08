@@ -12,7 +12,7 @@ class TestSchemaValidation:
 
     def test_v1_schema_valid_formats(self):
         """Test v1 schema validation with valid formats."""
-        # Valid v1 formats (versions < 2000)
+        # Valid v1 formats (versions < 2017)
         valid_cases = [
             ("1990.0", "nightly"),
             ("1999.0", "minor"),
@@ -28,7 +28,7 @@ class TestSchemaValidation:
 
     def test_v1_schema_invalid_formats(self):
         """Test v1 schema validation with invalid formats."""
-        # Invalid v1 formats (versions < 2000 with patch)
+        # Invalid v1 formats (versions < 2017 with patch)
         invalid_cases = [
             ("1990.0.1", "nightly"),
             ("1999.0.5", "minor"),
@@ -47,9 +47,9 @@ class TestSchemaValidation:
 
     def test_v2_schema_valid_formats(self):
         """Test v2 schema validation with valid formats."""
-        # Valid v2 formats (versions >= 2000)
+        # Valid v2 formats (versions >= 2017)
         valid_cases = [
-            ("2000.0.0", "nightly"),
+            ("2017.0.0", "nightly"),
             ("2222.0.0", "minor"),
             ("3000.5.2", "dev"),
         ]
@@ -63,9 +63,9 @@ class TestSchemaValidation:
 
     def test_v2_schema_invalid_formats(self):
         """Test v2 schema validation with invalid formats."""
-        # Invalid v2 formats (versions >= 2000 without patch)
+        # Invalid v2 formats (versions >= 2017 without patch)
         invalid_cases = [
-            ("2000.0", "nightly"),
+            ("2017.0", "nightly"),
             ("2222.0", "minor"),
             ("3000.5", "dev"),
         ]
@@ -85,13 +85,13 @@ class TestSchemaValidation:
         # Major and next releases should always pass validation
         test_cases = [
             ("1990.0", "major"),
-            ("2000.0.0", "major"),
+            ("2017.0.0", "major"),
             ("1990.0.1", "major"),
-            ("2000.0", "major"),
+            ("2017.0", "major"),
             ("1990.0", "next"),
-            ("2000.0.0", "next"),
+            ("2017.0.0", "next"),
             ("1990.0.1", "next"),
-            ("2000.0", "next"),
+            ("2017.0", "next"),
         ]
 
         for version, release_type in test_cases:
@@ -104,7 +104,7 @@ class TestSchemaValidation:
     def test_boundary_validation(self):
         """Test validation at the boundary between v1 and v2 schemas."""
         # Exactly at boundary - should require v2 schema
-        is_valid, error_message = validate_input_version_format("2000.0", "nightly")
+        is_valid, error_message = validate_input_version_format("2017.0", "nightly")
         assert not is_valid
         assert "v2 schema" in error_message
         assert "missing patch version" in error_message

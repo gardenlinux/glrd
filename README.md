@@ -172,7 +172,7 @@ options:
   --archived            Show only archived releases.
   --latest              Show the latest active major.minor release.
   --type TYPE           Filter by release types (comma-separated list, default: major,minor). E.g., --type major,minor,nightly,dev,next
-  --version VERSION     Filter by a specific version (major, major.minor, or major.minor.patch). E.g., --version 1312, --version 1312.0, or --version 2000.0.0
+  --version VERSION     Filter by a specific version (major, major.minor, or major.minor.patch). E.g., --version 1312, --version 1312.0, or --version 2017.0.0
   --fields FIELDS       Comma-separated list of fields to output. Possible fields: Name,Version,Type,GitCommit,GitCommitShort,ReleaseDate,ReleaseTime,ExtendedMaintenance,EndOfMaintenance,Flavors,OCI,AttributesSourceRepo (default: Name,Version,Type,GitCommitShort,ReleaseDate,ExtendedMaintenance,EndOfMaintenance)
   --no-header           Omit the header in shell output.
   -V                    show program's version number and exit
@@ -211,7 +211,7 @@ minor-1592.6     1592.6  minor   cb05e11f          2025-02-19     N/A           
       "version": {
         "major": 1592,
         "minor": 6
-        // Note: patch field is only present for versions ≥ 2000.0.0
+        // Note: patch field is only present for versions ≥ 2017.0.0
       },
       "lifecycle": {
         "released": {
@@ -410,7 +410,7 @@ minor-1592.6     1592.6  minor   cb05e11f          2025-02-19     N/A           
 1592.6
 ```
 
-**Note**: For versions ≥ 2000.0.0, you can also filter by patch version: `jq -r '.releases[] | "\(.version.major).\(.version.minor).\(.version.patch)"'`
+**Note**: For versions ≥ 2017.0.0, you can also filter by patch version: `jq -r '.releases[] | "\(.version.major).\(.version.minor).\(.version.patch)"'`
 
 ### Get all active and supported Garden Linux Versions
 
@@ -483,7 +483,7 @@ options:
   --create-initial-releases CREATE_INITIAL_RELEASES
                         Comma-separated list of initial releases to retrieve and generate: 'major,minor,nightly'.
   --create CREATE       Create a release for this type using the current timestamp and git information (choose one of: major,minor,nightly,dev,next)'.
-  --version VERSION     Manually specify the version (format: major.minor for versions < 2000.0.0, major.minor.patch for versions ≥ 2000.0.0).
+  --version VERSION     Manually specify the version (format: major.minor for versions < 2017.0.0, major.minor.patch for versions ≥ 2017.0.0).
   --commit COMMIT       Manually specify the git commit hash (40 characters).
   --lifecycle-released-isodatetime LIFECYCLE_RELEASED_ISODATETIME
                         Manually specify the release date and time in ISO format (YYYY-MM-DDTHH:MM:SS).
@@ -639,8 +639,8 @@ The Garden Linux Release Database (GLRD) uses structured JSON schemas to represe
 
 Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gardenlinux/issues/3069) in [TODO!!! name commit !!!]. GLRD supports both versioning schemes based on the major version number:
 
-- **v1: Versions < 2000.0.0**: Use the `major.minor` format (e.g., `27.0`, `1592.6`)
-- **v2: Versions ≥ 2000.0.0**: Use the `major.minor.patch` format (e.g., `2000.0.0`, `2222.1.5`)
+- **v1: Versions < 2017.0.0**: Use the `major.minor` format (e.g., `27.0`, `1592.6`)
+- **v2: Versions ≥ 2017.0.0**: Use the `major.minor.patch` format (e.g., `2017.0.0`, `2222.1.5`)
 
 ### Major Releases
 
@@ -669,12 +669,12 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `minor-1312.1` for v1 versions, `minor-2000.0.0` for v2 versions).
+- **`name`**: A string representing the release name (e.g., `minor-1312.1` for v1 versions, `minor-2017.0.0` for v2 versions).
 - **`type`**: `minor`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number (e.g. `1312`).
   - **`minor`**: An integer indicating the minor version number (e.g. `1`).
-  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2000.0.0, e.g. `0`).
+  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2017.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -697,12 +697,12 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `nightly-1312.0` for v1 versions, `nightly-2000.0.0` for v2 versions).
+- **`name`**: A string representing the release name (e.g., `nightly-1312.0` for v1 versions, `nightly-2017.0.0` for v2 versions).
 - **`type`**: `nightly`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number.
   - **`minor`**: An integer indicating the minor version number.
-  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2000.0.0, e.g. `0`).
+  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2017.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.
@@ -720,12 +720,12 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 
 #### Schema Fields
 
-- **`name`**: A string representing the release name (e.g., `dev-1312.0` for v1 versions, `dev-2000.0.0` for v2 versions).
+- **`name`**: A string representing the release name (e.g., `dev-1312.0` for v1 versions, `dev-2017.0.0` for v2 versions).
 - **`type`**: `dev`.
 - **`version`**:
   - **`major`**: An integer indicating the major version number.
   - **`minor`**: An integer indicating the minor version number.
-  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2000.0.0, e.g. `0`).
+  - **`patch`**: An integer indicating the patch version number (only present for versions ≥ 2017.0.0, e.g. `0`).
 - **`lifecycle`**:
   - **`released`**:
     - **`isodate`**: The release date in ISO format.

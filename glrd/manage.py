@@ -59,7 +59,7 @@ def validate_input_version_format(version, release_type):
     if len(version_parts) == 2:
         major = int(version_parts[0])
         # Check if this version requires v2 schema (with patch field)
-        if major >= 2000:
+        if major >= 2017:
             return (
                 False,
                 f"Version {'.'.join(version_parts)} requires v2 schema "
@@ -69,7 +69,7 @@ def validate_input_version_format(version, release_type):
     elif len(version_parts) == 3:
         major = int(version_parts[0])
         # Check if this version should use v1 schema (without patch field)
-        if major < 2000:
+        if major < 2017:
             return (
                 False,
                 f"Version {'.'.join(version_parts)} uses v1 schema but "
@@ -97,7 +97,7 @@ def get_schema_for_release(release):
     version = release.get("version", {})
 
     # For major and next releases, always use v2 schema
-    # (they don't have major.minor.patch version numbers >= 2000)
+    # (they don't have major.minor.patch version numbers >= 2017)
     if release_type in ["major", "next"]:
         return SCHEMA_V2[release_type]
 
@@ -108,8 +108,8 @@ def get_schema_for_release(release):
         # minor = version.get("minor", 0)  # unused
         # patch = version.get("patch", 0)  # unused
 
-        # Use v2 schema (with patch field) for versions >= 2000.0.0
-        if major >= 2000:
+        # Use v2 schema (with patch field) for versions >= 2017.0.0
+        if major >= 2017:
             return SCHEMA_V2[release_type]
         else:
             return SCHEMA_V1[release_type]
@@ -631,8 +631,8 @@ def create_single_release(release_type, args, existing_releases):
         except ValueError:
             logging.error(
                 "Error: Invalid --version format. Use format: "
-                "major.minor (for versions < 2000.0.0) or "
-                "major.minor.patch (for versions >= 2000.0.0)"
+                "major.minor (for versions < 2017.0.0) or "
+                "major.minor.patch (for versions >= 2017.0.0)"
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
@@ -686,7 +686,7 @@ def create_single_release(release_type, args, existing_releases):
 
     if release_type in ["dev", "nightly"]:
         # Create name and version based on schema version
-        if major >= 2000:
+        if major >= 2017:
             # v2 schema: include patch version
             release["name"] = f"{release_type}-{major}.{minor}.{patch}"
             release["version"]["minor"] = minor
@@ -721,7 +721,7 @@ def create_single_release(release_type, args, existing_releases):
         release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
     elif release_type == "minor":
         # Create name and version based on schema version
-        if major >= 2000:
+        if major >= 2017:
             # v2 schema: include patch version
             release["name"] = f"{release_type}-{major}.{minor}.{patch}"
             release["version"]["minor"] = minor
@@ -1621,7 +1621,7 @@ def parse_arguments():
         "--version",
         type=str,
         help="Manually specify the version (format: major.minor for "
-        "versions < 2000.0.0, or major.minor.patch for versions >= 2000.0.0).",
+        "versions < 2017.0.0, or major.minor.patch for versions >= 2017.0.0).",
     )
     parser.add_argument(
         "--commit",

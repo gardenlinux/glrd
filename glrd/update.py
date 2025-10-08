@@ -233,8 +233,8 @@ def fix_patch_version_fields(releases):
             minor = version.get("minor")
             patch = version.get("patch")
 
-            # Only add patch field for versions >= 2000.0.0 (v2 schema)
-            if major is not None and major >= 2000:
+            # Only add patch field for versions >= 2017.0.0 (v2 schema)
+            if major is not None and major >= 2017:
                 # If patch is missing, set it to 0
                 if patch is None:
                     version["patch"] = 0
@@ -250,7 +250,7 @@ def fix_patch_version_fields(releases):
                     fixed_count += 1
                     logging.debug(f"Fixed name: {current_name} -> {expected_name}")
             else:
-                # For versions < 2000.0.0 (v1 schema), ensure patch field is NOT present
+                # For versions < 2017.0.0 (v1 schema), ensure patch field is NOT present
                 if "patch" in version:
                     del version["patch"]
                     fixed_count += 1

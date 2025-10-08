@@ -65,11 +65,11 @@ def get_version_string(version, release_type=None):
     minor = version.get("minor", 0)
     patch = version.get("patch", 0)
 
-    # Use v2 schema format (with patch) for versions >= 2000.0.0
-    if major >= 2000:
+    # Use v2 schema format (with patch) for versions >= 2017.0.0
+    if major >= 2017:
         return f"{major}.{minor}.{patch}"
     else:
-        # Use v1 schema format (without patch) for versions < 2000.0.0
+        # Use v1 schema format (without patch) for versions < 2017.0.0
         return f"{major}.{minor}"
 
 
@@ -154,11 +154,11 @@ def find_latest_release(releases):
         minor = version.get("minor", 0)
         patch = version.get("patch", 0)
 
-        # For versions >= 2000.0.0, include patch in comparison
-        if major >= 2000:
+        # For versions >= 2017.0.0, include patch in comparison
+        if major >= 2017:
             return (major, minor, patch)
         else:
-            # For versions < 2000.0.0, exclude patch from comparison
+            # For versions < 2017.0.0, exclude patch from comparison
             return (major, minor, 0)
 
     return max(releases, key=get_version_key, default=None)
@@ -390,11 +390,11 @@ def sort_releases(releases):
         minor = parse_version_part(version.get("minor", -1))
         patch = parse_version_part(version.get("patch", -1))
 
-        # For versions >= 2000.0.0, include patch in sorting
-        if isinstance(major, int) and major >= 2000:
+        # For versions >= 2017.0.0, include patch in sorting
+        if isinstance(major, int) and major >= 2017:
             return (major, minor, patch)
         else:
-            # For versions < 2000.0.0 or non-integer majors (like 'next'),
+            # For versions < 2017.0.0 or non-integer majors (like 'next'),
             # exclude patch from sorting
             return (major, minor, 0)
 

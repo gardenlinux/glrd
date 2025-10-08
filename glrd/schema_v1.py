@@ -1,5 +1,5 @@
 """
-Schema v1 for Garden Linux releases with versions < 2000.0.0.
+Schema v1 for Garden Linux releases with versions < 2017.0.0.
 This schema version does not require the patch field in version objects.
 """
 
