@@ -3,10 +3,11 @@ on:
   workflow_dispatch:
   push:
     tags-ignore:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - "v[0-9]+.[0-9]+.[0-9]+"
     paths:
       - bin/**
       - glrd/**
+      - tests/**
       - Containerfile
       - poetry.lock
       - pyproject.toml
@@ -20,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [ amd64, arm64 ]
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,10 +42,10 @@ jobs:
           name: build-${{ matrix.arch }}
           path: /tmp/${{ matrix.arch }}-oci.tar
           if-no-files-found: error
-          retention-days: 1            
+          retention-days: 1
   push:
     name: push
-    runs-on: 'ubuntu-latest'
+    runs-on: "ubuntu-latest"
     defaults:
       run:
         shell: bash
@@ -56,12 +57,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-amd64
-          path: /tmp        
+          path: /tmp
       - name: download build-arm64
         uses: actions/download-artifact@v4
         with:
           name: build-arm64
-          path: /tmp        
+          path: /tmp
       - name: podman login
         run: |
           podman login -u token -p ${{ github.token }} ghcr.io
