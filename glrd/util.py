@@ -68,6 +68,7 @@ DEFAULTS = {
         "openstack": "qcow2",
         "openstackbaremetal": "qcow2",
         "vmware": "ova",
+        "lima": "qcow2",
     },
 }
 
