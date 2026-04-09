@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import boto3
 import pytz
@@ -465,8 +465,9 @@ def create_initial_nightly_releases(major_releases):
             key=lambda r: r["lifecycle"]["released"]["timestamp"],
         )
         # Convert the timestamp to a datetime object and set the time to 06:00 UTC
-        start_date = datetime.utcfromtimestamp(
-            first_major_release["lifecycle"]["released"]["timestamp"]
+        start_date = datetime.fromtimestamp(
+            first_major_release["lifecycle"]["released"]["timestamp"],
+            timezone.utc
         ).replace(hour=7, minute=0, second=0, tzinfo=pytz.UTC)
     else:
         logging.info(

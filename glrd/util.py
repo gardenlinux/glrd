@@ -4,7 +4,7 @@ import os
 import re
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, Optional
@@ -21,16 +21,27 @@ from gardenlinux.s3 import Bucket
 ERROR_CODES = {
     "validation_error": 1,
     "subprocess_output_error": 2,
+    "subprocess_output_missing": 12,
     "no_releases": 3,
     "s3_error": 4,
+    "s3_output_error": 13,
     "query_error": 5,
     "parameter_missing": 6,
+    "input_parameter_missing": 14,
+    "input_parameter_error": 15,
     "invalid_field": 7,
     "http_error": 8,
     "file_not_found": 9,
     "format_error": 10,
     "input_error": 11,
+    "output_error": 16,
 }
+
+
+def fatal_error(message: str, code: str) -> None:
+    """Log an error message and exit with the corresponding error code."""
+    logging.error(message)
+    sys.exit(ERROR_CODES[code])
 
 DEFAULTS = {
     # Release types
@@ -136,7 +147,7 @@ def isodate_to_timestamp(isodate):
 
 def timestamp_to_isodate(timestamp):
     """Convert timestamp to ISO date."""
-    dt = datetime.utcfromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp, timezone.utc)
     return dt.strftime("%Y-%m-%d")
 
 
