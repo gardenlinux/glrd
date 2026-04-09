@@ -792,6 +792,147 @@ def delete_release(
     logging.debug(f"Release '{args.delete}' will be deleted.")
 
 
+def update_release(
+    args,
+    next_releases,
+    major_releases,
+    minor_releases,
+    nightly_releases,
+    dev_releases,
+):
+    """Update an existing release by name, modifying specified fields in-place."""
+    release_type, major, minor, patch = parse_release_name(args.update)
+
+    # Select the appropriate list based on release_type
+    if release_type == "next":
+        release_list = next_releases
+    elif release_type == "major":
+        release_list = major_releases
+    elif release_type == "minor":
+        release_list = minor_releases
+    elif release_type == "nightly":
+        release_list = nightly_releases
+    elif release_type == "dev":
+        release_list = dev_releases
+    else:
+        logging.error(f"Error: Unknown release type '{release_type}' in release name.")
+        sys.exit(ERROR_CODES["validation_error"])
+
+    # Validate field applicability for the release type
+    if args.lifecycle_extended_isodatetime and release_type not in ["major", "next"]:
+        logging.error(
+            f"Error: '--lifecycle-extended-isodatetime' is only valid for "
+            f"'major' and 'next' release types, not '{release_type}'."
+        )
+        sys.exit(ERROR_CODES["validation_error"])
+
+    if args.lifecycle_eol_isodatetime and release_type not in [
+        "next",
+        "major",
+        "minor",
+    ]:
+        logging.error(
+            f"Error: '--lifecycle-eol-isodatetime' is only valid for "
+            f"'next', 'major', and 'minor' release types, not '{release_type}'."
+        )
+        sys.exit(ERROR_CODES["validation_error"])
+
+    if args.commit and release_type not in ["minor", "nightly", "dev"]:
+        logging.error(
+            f"Error: '--commit' is only valid for 'minor', 'nightly', and "
+            f"'dev' release types, not '{release_type}'."
+        )
+        sys.exit(ERROR_CODES["validation_error"])
+
+    # Find the release by name
+    release = None
+    for r in release_list:
+        if r["name"] == args.update:
+            release = r
+            break
+
+    if release is None:
+        logging.error(f"Error: Release '{args.update}' not found in the existing data.")
+        sys.exit(ERROR_CODES["validation_error"])
+
+    # Apply lifecycle.released update
+    if args.lifecycle_released_isodatetime:
+        try:
+            released_date = datetime.strptime(
+                args.lifecycle_released_isodatetime, "%Y-%m-%dT%H:%M:%S"
+            ).replace(tzinfo=pytz.UTC)
+        except ValueError:
+            logging.error(
+                "Error: Invalid --lifecycle-released-isodatetime format. "
+                "Use ISO format: YYYY-MM-DDTHH:MM:SS"
+            )
+            sys.exit(ERROR_CODES["validation_error"])
+        if "released" not in release["lifecycle"]:
+            release["lifecycle"]["released"] = {}
+        release["lifecycle"]["released"]["isodate"] = released_date.strftime("%Y-%m-%d")
+        release["lifecycle"]["released"]["timestamp"] = int(released_date.timestamp())
+        logging.info(
+            f"Updated lifecycle.released for '{args.update}' to "
+            f"{released_date.strftime('%Y-%m-%d')}."
+        )
+
+    # Apply lifecycle.extended update (only for major/next)
+    if args.lifecycle_extended_isodatetime:
+        try:
+            extended_date = datetime.strptime(
+                args.lifecycle_extended_isodatetime, "%Y-%m-%dT%H:%M:%S"
+            ).replace(tzinfo=pytz.UTC)
+        except ValueError:
+            logging.error(
+                "Error: Invalid --lifecycle-extended-isodatetime format. "
+                "Use ISO format: YYYY-MM-DDTHH:MM:SS"
+            )
+            sys.exit(ERROR_CODES["validation_error"])
+        if "extended" not in release["lifecycle"]:
+            release["lifecycle"]["extended"] = {}
+        release["lifecycle"]["extended"]["isodate"] = extended_date.strftime("%Y-%m-%d")
+        release["lifecycle"]["extended"]["timestamp"] = int(extended_date.timestamp())
+        logging.info(
+            f"Updated lifecycle.extended for '{args.update}' to "
+            f"{extended_date.strftime('%Y-%m-%d')}."
+        )
+
+    # Apply lifecycle.eol update (only for next/major/minor)
+    if args.lifecycle_eol_isodatetime:
+        try:
+            eol_date = datetime.strptime(
+                args.lifecycle_eol_isodatetime, "%Y-%m-%dT%H:%M:%S"
+            ).replace(tzinfo=pytz.UTC)
+        except ValueError:
+            logging.error(
+                "Error: Invalid --lifecycle-eol-isodatetime format. "
+                "Use ISO format: YYYY-MM-DDTHH:MM:SS"
+            )
+            sys.exit(ERROR_CODES["validation_error"])
+        if "eol" not in release["lifecycle"]:
+            release["lifecycle"]["eol"] = {}
+        release["lifecycle"]["eol"]["isodate"] = eol_date.strftime("%Y-%m-%d")
+        release["lifecycle"]["eol"]["timestamp"] = int(eol_date.timestamp())
+        logging.info(
+            f"Updated lifecycle.eol for '{args.update}' to "
+            f"{eol_date.strftime('%Y-%m-%d')}."
+        )
+
+    # Apply commit update (only for minor/nightly/dev)
+    if args.commit:
+        commit = args.commit
+        if len(commit) != 40:
+            logging.error("Error: Invalid commit hash. Must be 40 characters.")
+            sys.exit(ERROR_CODES["validation_error"])
+        if "git" not in release:
+            release["git"] = {}
+        release["git"]["commit"] = commit
+        release["git"]["commit_short"] = commit[:8]
+        logging.info(f"Updated git.commit for '{args.update}' to {commit[:8]}.")
+
+    logging.debug(f"Release '{args.update}' will be updated.")
+
+
 def merge_input_data(existing_releases, new_releases):
     """Merge two lists of releases, updating existing releases with new releases."""
     # Create a dictionary of releases by name from existing_releases
@@ -1369,6 +1510,59 @@ def handle_releases(args):
             dev_releases,
         )
 
+    elif args.update:
+        if args.no_query:
+            logging.error("Error: '--update' cannot run with '--no-query'.")
+            sys.exit(ERROR_CODES["parameter_missing"])
+        # Validate at least one modifier is provided
+        if not any(
+            [
+                args.lifecycle_released_isodatetime,
+                args.lifecycle_extended_isodatetime,
+                args.lifecycle_eol_isodatetime,
+                args.commit,
+            ]
+        ):
+            logging.error(
+                "Error: '--update' requires at least one of: "
+                "--lifecycle-released-isodatetime, --lifecycle-extended-isodatetime, "
+                "--lifecycle-eol-isodatetime, --commit."
+            )
+            sys.exit(ERROR_CODES["parameter_missing"])
+
+        # Add stdin input or file input data if provided (existing releases will be overwritten)
+        if args.input_stdin or args.input:
+            if args.input_stdin:
+                (
+                    input_next,
+                    input_major,
+                    input_minor,
+                    input_nightly,
+                    input_dev,
+                ) = load_input_stdin()
+            elif args.input:
+                (
+                    input_next,
+                    input_major,
+                    input_minor,
+                    input_nightly,
+                    input_dev,
+                ) = load_input(args.input_file)
+            next_releases = merge_input_data(next_releases, input_next)
+            major_releases = merge_input_data(major_releases, input_major)
+            minor_releases = merge_input_data(minor_releases, input_minor)
+            nightly_releases = merge_input_data(nightly_releases, input_nightly)
+            dev_releases = merge_input_data(dev_releases, input_dev)
+
+        update_release(
+            args,
+            next_releases,
+            major_releases,
+            minor_releases,
+            nightly_releases,
+            dev_releases,
+        )
+
     else:
         if create_initial_major or create_initial_minor:
             github_releases = get_github_releases()
@@ -1604,6 +1798,14 @@ def parse_arguments():
         type=str,
         help="Delete a release by name (format: type-major.minor or "
         "type-major.minor.patch). Requires --s3-update.",
+    )
+    parser.add_argument(
+        "--update",
+        type=str,
+        help="Update an existing release by name (format: type-major.minor or "
+        "type-major.minor.patch or type-major). Requires at least one of: "
+        "--lifecycle-released-isodatetime, --lifecycle-extended-isodatetime, "
+        "--lifecycle-eol-isodatetime, --commit.",
     )
     parser.add_argument(
         "--create-initial-releases",
