@@ -17,8 +17,7 @@ from dateutil.relativedelta import relativedelta
 from deepdiff import DeepDiff
 from jsonschema import validate, ValidationError
 
-from glrd.schema_v1 import SCHEMA_V1
-from glrd.schema_v2 import SCHEMA_V2
+from glrd.schema import SCHEMA_V1, SCHEMA_V2
 
 from glrd.query import load_all_releases
 from glrd.util import (
