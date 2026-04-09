@@ -53,7 +53,9 @@ def fatal_error(message: str, code: str) -> None:
     sys.exit(ERROR_CODES[code])
 
 
-def split_releases_by_type(releases: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+def split_releases_by_type(
+    releases: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, Any]]]:
     """Split a list of releases into a dict keyed by release type."""
     result = {
         "next": [],
@@ -77,6 +79,7 @@ def run_subprocess(command: List[str], error_msg: str) -> str:
     if result.returncode != 0:
         fatal_error(f"{error_msg}: {result.stderr}", "subprocess_output_error")
     return result.stdout
+
 
 DEFAULTS = {
     # Release types
@@ -186,7 +189,7 @@ def timestamp_to_isodate(timestamp):
     return dt.strftime("%Y-%m-%d")
 
 
-def parse_isodatetime(value: str, field_name: str) -> datetime:
+def parse_isodatetime(value: str, field_name: str) -> Optional[datetime]:
     """
     Parse an ISO datetime string and return a timezone-aware datetime.
     Exits with error if parsing fails.
@@ -196,7 +199,7 @@ def parse_isodatetime(value: str, field_name: str) -> datetime:
     except ValueError:
         fatal_error(
             f"Invalid --{field_name} format. Use ISO format: YYYY-MM-DDTHH:MM:SS",
-            "validation_error"
+            "validation_error",
         )
 
 

@@ -467,8 +467,7 @@ def create_initial_nightly_releases(major_releases):
         )
         # Convert the timestamp to a datetime object and set the time to 06:00 UTC
         start_date = datetime.fromtimestamp(
-            first_major_release["lifecycle"]["released"]["timestamp"],
-            timezone.utc
+            first_major_release["lifecycle"]["released"]["timestamp"], timezone.utc
         ).replace(hour=7, minute=0, second=0, tzinfo=pytz.UTC)
     else:
         logging.info(

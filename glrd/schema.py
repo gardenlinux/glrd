@@ -8,8 +8,6 @@ This module generates both schemas from shared building blocks to eliminate
 code duplication between the previous schema_v1.py and schema_v2.py files.
 """
 
-from copy import deepcopy
-
 
 def _build_lifecycle_required_fields(release_type: str) -> list:
     if release_type in ("next", "major"):
@@ -98,7 +96,11 @@ def _build_release_schema(
             "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
             "commit_short": {"type": "string", "pattern": "^[0-9a-f]{7,8}$"},
         }
-        schema["properties"]["git"] = {"type": "object", "properties": git_props, "required": ["commit", "commit_short"]}
+        schema["properties"]["git"] = {
+            "type": "object",
+            "properties": git_props,
+            "required": ["commit", "commit_short"],
+        }
         schema["required"].append("git")
 
         schema["properties"]["flavors"] = {"type": "array", "items": {"type": "string"}}
@@ -152,7 +154,11 @@ def _build_next_major_schema(release_type: str) -> dict:
             "type": {"enum": [release_type]},
             "version": {
                 "type": "object",
-                "properties": {"major": {"enum": ["next"]} if release_type == "next" else {"major": {"type": "integer"}}},
+                "properties": (
+                    {"major": {"enum": ["next"]}}
+                    if release_type == "next"
+                    else {"major": {"type": "integer"}}
+                ),
                 "required": ["major"],
             },
             "lifecycle": {
