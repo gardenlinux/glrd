@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import signal
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,10 +39,44 @@ ERROR_CODES = {
 }
 
 
+V2_SCHEMA_THRESHOLD = 2017
+
+
+def uses_patch_version(major: int) -> bool:
+    """Check if a major version requires the patch field (v2 schema)."""
+    return major >= V2_SCHEMA_THRESHOLD
+
+
 def fatal_error(message: str, code: str) -> None:
     """Log an error message and exit with the corresponding error code."""
     logging.error(message)
     sys.exit(ERROR_CODES[code])
+
+
+def split_releases_by_type(releases: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Split a list of releases into a dict keyed by release type."""
+    result = {
+        "next": [],
+        "major": [],
+        "minor": [],
+        "nightly": [],
+        "dev": [],
+    }
+    for release in releases:
+        release_type = release.get("type")
+        if release_type in result:
+            result[release_type].append(release)
+    return result
+
+
+def run_subprocess(command: List[str], error_msg: str) -> str:
+    """Run a subprocess command and return stdout, or exit with error."""
+    result = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    if result.returncode != 0:
+        fatal_error(f"{error_msg}: {result.stderr}", "subprocess_output_error")
+    return result.stdout
 
 DEFAULTS = {
     # Release types
@@ -149,6 +184,20 @@ def timestamp_to_isodate(timestamp):
     """Convert timestamp to ISO date."""
     dt = datetime.fromtimestamp(timestamp, timezone.utc)
     return dt.strftime("%Y-%m-%d")
+
+
+def parse_isodatetime(value: str, field_name: str) -> datetime:
+    """
+    Parse an ISO datetime string and return a timezone-aware datetime.
+    Exits with error if parsing fails.
+    """
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+    except ValueError:
+        fatal_error(
+            f"Invalid --{field_name} format. Use ISO format: YYYY-MM-DDTHH:MM:SS",
+            "validation_error"
+        )
 
 
 # Handle SIGPIPE and BrokenPipeError
