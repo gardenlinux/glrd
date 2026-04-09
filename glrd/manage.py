@@ -31,6 +31,7 @@ from glrd.util import (
     get_flavors_from_git,
     get_s3_artifacts_data,
     get_flavors_from_s3_artifacts,
+    split_releases_by_type,
 )
 
 # silence boto3 logging
@@ -980,22 +981,17 @@ def load_input(filename):
     """Load manual input from a file if it exists."""
     try:
         input_data = yaml.safe_load(open(filename, "r"))
-
         merged_releases = input_data.get("releases", [])
         if len(merged_releases) == 0:
             logging.error("Error, no releases found in JSON from file")
             sys.exit(ERROR_CODES["input_parameter_missing"])
-        next_releases = [r for r in merged_releases if r["type"] == "next"]
-        major_releases = [r for r in merged_releases if r["type"] == "major"]
-        minor_releases = [r for r in merged_releases if r["type"] == "minor"]
-        nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
-        dev_releases = [r for r in merged_releases if r["type"] == "dev"]
+        by_type = split_releases_by_type(merged_releases)
         return (
-            next_releases,
-            major_releases,
-            minor_releases,
-            nightly_releases,
-            dev_releases,
+            by_type["next"],
+            by_type["major"],
+            by_type["minor"],
+            by_type["nightly"],
+            by_type["dev"],
         )
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing JSON from file: {str(e)}")
@@ -1010,32 +1006,24 @@ def load_input_stdin():
     try:
         stdin_data = sys.stdin.read()
         input_data = json.loads(stdin_data)
-
         logging.debug(f"Input data from stdin: {input_data}")
-
         merged_releases = input_data.get("releases", [])
         if len(merged_releases) == 0:
             logging.error("Error, no releases found in JSON from stdin")
             sys.exit(ERROR_CODES["input_parameter_missing"])
-        next_releases = [r for r in merged_releases if r["type"] == "next"]
-        major_releases = [r for r in merged_releases if r["type"] == "major"]
-        minor_releases = [r for r in merged_releases if r["type"] == "minor"]
-        nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
-        dev_releases = [r for r in merged_releases if r["type"] == "dev"]
-
+        by_type = split_releases_by_type(merged_releases)
         logging.debug(
             f"Parsed releases from stdin - "
-            f"next: {len(next_releases)}, major: {len(major_releases)}, "
-            f"minor: {len(minor_releases)}, nightly: {len(nightly_releases)}, "
-            f"dev: {len(dev_releases)}"
+            f"next: {len(by_type['next'])}, major: {len(by_type['major'])}, "
+            f"minor: {len(by_type['minor'])}, nightly: {len(by_type['nightly'])}, "
+            f"dev: {len(by_type['dev'])}"
         )
-
         return (
-            next_releases,
-            major_releases,
-            minor_releases,
-            nightly_releases,
-            dev_releases,
+            by_type["next"],
+            by_type["major"],
+            by_type["minor"],
+            by_type["nightly"],
+            by_type["dev"],
         )
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing JSON from stdin: {str(e)}")
