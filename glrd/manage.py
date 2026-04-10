@@ -20,6 +20,11 @@ from jsonschema import validate, ValidationError
 from glrd.schema import SCHEMA_V1, SCHEMA_V2
 
 from glrd.query import load_all_releases
+from glrd.s3 import (
+    download_all_s3_files,
+    upload_all_local_files,
+    save_output_file as s3_save_output_file,
+)
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,
