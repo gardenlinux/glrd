@@ -34,6 +34,12 @@ from glrd.s3 import (
     upload_all_local_files,
     save_output_file as s3_save_output_file,
 )
+from glrd.validation import (
+    validate_input_version_format,
+    get_schema_for_release,
+    validate_release_data,
+    validate_all_releases,
+)
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,
