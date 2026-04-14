@@ -38,7 +38,9 @@ def save_output_file(data: Dict[str, Any], filename: str, format: str = "yaml") 
             json.dump(data, file, separators=(",", ":"), ensure_ascii=False)
 
 
-def create_s3_bucket(args, bucket_name: Optional[str] = None, region: Optional[str] = None):
+def create_s3_bucket(
+    args, bucket_name: Optional[str] = None, region: Optional[str] = None
+):
     """Create an S3 bucket for storing releases data."""
     if not bucket_name:
         bucket_name = args.s3_bucket_name
