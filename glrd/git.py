@@ -196,6 +196,7 @@ def cleanup_temp_repo() -> None:
     global _repo_clone_path
     if _repo_clone_path:
         import shutil
+
         shutil.rmtree(_repo_clone_path, ignore_errors=True)
         _repo_clone_path = None
 
@@ -287,7 +288,7 @@ def create_initial_releases(releases: list) -> Tuple[list, list, dict, dict]:
         releases: List of GitHub release objects
 
     Returns:
-        Tuple of (release_data_major, release_data_minor, 
+        Tuple of (release_data_major, release_data_minor,
                   latest_minor_versions, latest_patch_versions)
     """
     release_data_major = []
@@ -384,13 +385,11 @@ def create_initial_nightly_releases(major_releases: list) -> list:
     # Use the first major release's timestamp to determine the start date
     first_major_release = sorted_major_releases[0]
     start_date = datetime.fromtimestamp(
-        first_major_release["lifecycle"]["released"]["timestamp"],
-        pytz.UTC
+        first_major_release["lifecycle"]["released"]["timestamp"], pytz.UTC
     ).replace(hour=7, minute=0, second=0, microsecond=0, tzinfo=pytz.UTC)
 
     # Calculate the number of nightly releases to create (one per day)
     for major_release in sorted_major_releases:
-        major_version = major_release["version"]["major"]
         current_date = start_date
 
         # Create nightly releases until the next major release
@@ -405,9 +404,11 @@ def create_initial_nightly_releases(major_releases: list) -> list:
             )
 
             release = {
-                "name": f"nightly-{major}.{minor}.{patch}"
-                if major >= 2017
-                else f"nightly-{major}.{minor}",
+                "name": (
+                    f"nightly-{major}.{minor}.{patch}"
+                    if major >= 2017
+                    else f"nightly-{major}.{minor}"
+                ),
                 "type": "nightly",
                 "version": {"major": major, "minor": minor},
                 "lifecycle": {
@@ -427,6 +428,7 @@ def create_initial_nightly_releases(major_releases: list) -> list:
             logging.debug(f"Nightly release '{release['name']}' created.")
             # Move to next day
             from datetime import timedelta
+
             current_date = current_date + timedelta(days=1)
 
     return nightly_releases

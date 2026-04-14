@@ -6,8 +6,7 @@ dict-based approach with immutable, typed objects that are self-documenting
 and easier to test.
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -164,7 +163,11 @@ class Lifecycle:
         Returns:
             True if the release is active (EOL in the future)
         """
-        ts = current_timestamp if current_timestamp is not None else get_current_timestamp()
+        ts = (
+            current_timestamp
+            if current_timestamp is not None
+            else get_current_timestamp()
+        )
         if self.eol and self.eol.timestamp:
             return self.eol.timestamp > ts
         return False
@@ -180,7 +183,11 @@ class Lifecycle:
         Returns:
             True if the release is archived (EOL in the past)
         """
-        ts = current_timestamp if current_timestamp is not None else get_current_timestamp()
+        ts = (
+            current_timestamp
+            if current_timestamp is not None
+            else get_current_timestamp()
+        )
         if self.eol and self.eol.timestamp:
             return self.eol.timestamp < ts
         return False
@@ -377,14 +384,19 @@ class ReleaseCollection:
         """Filter to only archived releases."""
         return ReleaseCollection([r for r in self._releases if r.is_archived()])
 
-    def filter_version(self, major: int, minor: Optional[int] = None, patch: Optional[int] = None) -> "ReleaseCollection":
+    def filter_version(
+        self, major: int, minor: Optional[int] = None, patch: Optional[int] = None
+    ) -> "ReleaseCollection":
         """Filter releases by version components."""
-        return ReleaseCollection([
-            r for r in self._releases
-            if r.version.major == major
-            and (minor is None or r.version.minor == minor)
-            and (patch is None or r.version.patch == patch)
-        ])
+        return ReleaseCollection(
+            [
+                r
+                for r in self._releases
+                if r.version.major == major
+                and (minor is None or r.version.minor == minor)
+                and (patch is None or r.version.patch == patch)
+            ]
+        )
 
     def latest(self) -> Optional[Release]:
         """Find the latest release by version."""
@@ -405,7 +417,9 @@ class ReleaseCollection:
         return self._releases
 
 
-def parse_release_name(release_name: str) -> Tuple[ReleaseType, int, Optional[int], Optional[int]]:
+def parse_release_name(
+    release_name: str,
+) -> Tuple[ReleaseType, int, Optional[int], Optional[int]]:
     """
     Parse a release name in the format 'type-major.minor.patch' or similar.
 
