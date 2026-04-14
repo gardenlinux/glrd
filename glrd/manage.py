@@ -14,7 +14,7 @@ import pytz
 import yaml
 from botocore.exceptions import ClientError
 from dateutil.relativedelta import relativedelta
-from deepdiff import DeepDiff
+from deepdiff.diff import DeepDiff
 from jsonschema import validate, ValidationError
 
 from glrd.schema import SCHEMA_V1, SCHEMA_V2
