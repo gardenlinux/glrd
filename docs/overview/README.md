@@ -850,7 +850,7 @@ For example:
 
 In this example, the `eol` of `minor-1312.1` is set to the `released` date of `minor-1312.2`, and the `eol` of the latest minor release (`minor-1312.7`) is set to the `eol` of the major release (`minor-1312`).
 
-Please note that the `extended` lifecycle field is not taken into account for minor releases. This is simply an administrative date that has no technical implications.
+Note that the `extended` lifecycle field is not taken into account for minor releases. This is simply an administrative date that has no technical implications.
 
 #### Nightly an Dev dates
 
@@ -858,7 +858,7 @@ Due to the nature of the `nightly` and `dev` releases, those do not have `extend
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
+Contributions are welcome! Open an issue or submit a pull request for any improvements or bug fixes.
 
 ## License
 
