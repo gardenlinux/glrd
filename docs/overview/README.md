@@ -187,7 +187,7 @@ options:
   -V                    show program's version number and exit
 ```
 
-### Get latest Garden Linux Version
+### Get latest Garden Linux version
 
 #### Default shell output
 
@@ -421,7 +421,7 @@ minor-1592.6     1592.6  minor   cb05e11f          2025-02-19     N/A           
 
 **Note**: For versions ≥ 2017.0.0, you can also filter by patch version: `jq -r '.releases[] | "\(.version.major).\(.version.minor).\(.version.patch)"'`
 
-### Get all active and supported Garden Linux Versions
+### Get all active and supported Garden Linux versions
 
 ```
 ❯ glrd --active
@@ -674,22 +674,22 @@ The `--update` action allows you to modify lifecycle fields and commit hashes on
 - Date/time values must be in ISO format: `YYYY-MM-DDTHH:MM:SS`
 - Commit hashes must be exactly 40 characters (full SHA-1 hash)
 
-## Release Schema
+## Release schema
 
 The Garden Linux Release Database (GLRD) uses structured JSON schemas to represent different types of releases: **major**, **minor**, **nightly**, and **development** releases. Each release type has specific fields that capture essential information about the release.
 
-### Versioning Scheme
+### Versioning scheme
 
 Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gardenlinux/issues/3069) in [TODO!!! name commit !!!]. GLRD supports both versioning schemes based on the major version number:
 
 - **v1: Versions < 2017.0.0**: Use the `major.minor` format (e.g., `27.0`, `1592.6`)
 - **v2: Versions ≥ 2017.0.0**: Use the `major.minor.patch` format (e.g., `2017.0.0`, `2222.1.5`)
 
-### Major Releases
+### Major releases
 
 [Major releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#major-releases) are major releases that are supported over an extended period of time.
 
-#### Schema Fields
+#### Schema fields
 
 - **`name`**: A string representing the release name (e.g., `major-1312`).
 - **`type`**: `major`.
@@ -706,11 +706,11 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
     - **`isodate`**: End-of-life date in ISO format.
     - **`timestamp`**: UNIX timestamp for the end-of-life date.
 
-### Minor Releases
+### Minor releases
 
 [Minor Releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#minores) are updates delivered during the standard and extended mainteance periods of [Major releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#major-releases).
 
-#### Schema Fields
+#### Schema fields
 
 - **`name`**: A string representing the release name (e.g., `minor-1312.1` for v1 versions, `minor-2017.0.0` for v2 versions).
 - **`type`**: `minor`.
@@ -734,11 +734,11 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 - **`attributes`**: An object that does contain additional metadata about the release.
   - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
-### Nightly Releases
+### Nightly releases
 
 [Nightly releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#nightly-releases) are automated builds that are generated every night, reflecting the latest state of the codebase.
 
-#### Schema Fields
+#### Schema fields
 
 - **`name`**: A string representing the release name (e.g., `nightly-1312.0` for v1 versions, `nightly-2017.0.0` for v2 versions).
 - **`type`**: `nightly`.
@@ -757,11 +757,11 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 - **`attributes`**: An object that does contain additional metadata about the release.
   - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
-### Development Releases
+### Development releases
 
 [Development releases](TODO: define and link) are used for testing and development purposes, representing the latest changes that may not yet be included in a major or minor release. These can be manually created by developers.
 
-#### Schema Fields
+#### Schema fields
 
 - **`name`**: A string representing the release name (e.g., `dev-1312.0` for v1 versions, `dev-2017.0.0` for v2 versions).
 - **`type`**: `dev`.
@@ -780,11 +780,11 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
 - **`attributes`**: An object that does contain additional metadata about the release.
   - **`source_repo`**: A boolean indicating whether the release has debian source repoitories (default: true).
 
-### Next Release
+### Next release
 
 [Next release](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#next-release) is the projected next major releases. There can only be a single `next` release.
 
-#### Schema Fields
+#### Schema fields
 
 - **`name`**: A string representing the release name (`next`).
 - **`type`**: `next`.
@@ -801,11 +801,11 @@ Gardenlinux [introduced semantic Versioning](https://github.com/gardenlinux/gard
     - **`isodate`**: End-of-life date in ISO format.
     - **`timestamp`**: UNIX timestamp for the end-of-life date.
 
-### Lifecycle Dependencies
+### Lifecycle dependencies
 
 The lifecycle fields in the release schemas help track the release dates, extended maintenance dates and end-of-life (EOL) dates for each release.
 
-#### Default Major dates
+#### Default major dates
 
 The defaults for `extended` and `eol` dates are based on the [Garden Linux Release Plan Overview](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md) and defined to be:
 
@@ -821,7 +821,7 @@ For example:
   - `extended`: 2024-09-13
   - `eol`: 2025-01-13
 
-#### Major and Minor releases
+#### Major and minor releases
 
 There is a dependency between the `lifecycle` fields of **major** and **minor** releases:
 
@@ -850,15 +850,15 @@ For example:
 
 In this example, the `eol` of `minor-1312.1` is set to the `released` date of `minor-1312.2`, and the `eol` of the latest minor release (`minor-1312.7`) is set to the `eol` of the major release (`minor-1312`).
 
-Please note that the `extended` lifecycle field is not taken into account for minor releases. This is simply an administrative date that has no technical implications.
+Note that the `extended` lifecycle field is not taken into account for minor releases. This is simply an administrative date that has no technical implications.
 
-#### Nightly an Dev dates
+#### Nightly and dev dates
 
 Due to the nature of the `nightly` and `dev` releases, those do not have `extended` and `eol` dates.
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
+Contributions are welcome! Open an issue or submit a pull request for any improvements or bug fixes.
 
 ## License
 
