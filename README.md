@@ -7,11 +7,11 @@ information for the Garden Linux distribution.
 ## Documentation
 
 To find out how GLRD works, our
-[documentation hub](https://gardenlinux-docs.netlify.app/) contains a
-[detailed reference document](https://gardenlinux-docs.netlify.app/reference/supporting_tools/glrd.html).
+[documentation hub](https://docs.gardenlinux.org/) contains a
+[detailed reference document](https://docs.gardenlinux.org/reference/supporting_tools/glrd.html).
 
 In addition refer to our
-[release lifecycle document](https://gardenlinux-docs.netlify.app/reference/releases/release-lifecycle.html)
+[release lifecycle document](https://docs.gardenlinux.org/reference/releases/release-lifecycle.html)
 to learn how our releases work.
 
 ## Community
@@ -35,7 +35,7 @@ https://lists.neonephos.org/g/gardenlinux-security-embargo
 We welcome your contributions to Gardenlinux or any supporting projects.
 
 To find our more, visit our
-[Contributor Documentation](https://gardenlinux-docs.netlify.app/contributing).
+[Contributor Documentation](https://docs.gardenlinux.org/contributing).
 
 ## Licensing
 
