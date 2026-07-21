@@ -34,19 +34,28 @@ class Version:
     Immutable version object representing a release version.
 
     Handles both v1 schema (< 2017) and v2 schema (>= 2017) versions,
-    centralizing the version threshold logic.
+    centralizing the version threshold logic. The ``major`` component may be
+    the string ``"next"`` for the special ``next`` release; such versions never
+    use a patch field and always sort after all numeric versions.
     """
 
-    major: int
+    major: Any  # int, or the string "next"
     minor: Optional[int] = None
     patch: Optional[int] = None
 
     @property
+    def is_next(self) -> bool:
+        """True if this is the symbolic 'next' version."""
+        return not isinstance(self.major, int)
+
+    @property
     def uses_patch(self) -> bool:
         """Check if this version requires the patch field (v2 schema)."""
+        if self.is_next:
+            return False
         return self.major >= V2_SCHEMA_THRESHOLD
 
-    def to_string(self, release_type: ReleaseType) -> str:
+    def to_string(self, release_type: "ReleaseType") -> str:
         """
         Return a version string appropriate for the release type.
 
@@ -68,26 +77,35 @@ class Version:
         Parse a version string into a Version object.
 
         Args:
-            version_string: Version string like "2017", "2017.0", or "2017.0.1"
+            version_string: Version string like "2017", "2017.0", "2017.0.1",
+                or "next".
 
         Returns:
             Version object
         """
+        if version_string == "next":
+            return cls("next")
         parts = version_string.split(".")
         major = int(parts[0])
         minor = int(parts[1]) if len(parts) > 1 else None
         patch = int(parts[2]) if len(parts) > 2 else None
         return cls(major, minor, patch)
 
-    def to_sort_key(self) -> Tuple[int, int, int]:
+    def to_sort_key(self) -> Tuple[float, float, float]:
         """
         Get a sortable tuple for version comparison.
 
         For v1 schema versions (< 2017), patch is forced to 0 for comparison.
+        The symbolic 'next' version sorts after all numeric versions. A missing
+        minor or patch is treated as 0, so e.g. major ``2020`` and minor
+        ``2020.0`` sort adjacently (this is also why equality/hashing use the
+        same normalized key).
 
         Returns:
             Tuple of (major, minor, patch) suitable for sorting
         """
+        if self.is_next:
+            return (float("inf"), float("inf"), float("inf"))
         if self.uses_patch:
             return (self.major, self.minor or 0, self.patch or 0)
         return (self.major, self.minor or 0, 0)
@@ -279,12 +297,13 @@ class Release:
         if self.github:
             result["github"] = self.github
 
-        # Flavors
-        if self.flavors:
+        # Flavors: preserved when set (including an empty list), so the
+        # serialized shape matches what glrd-manage produces on creation.
+        if self.flavors is not None:
             result["flavors"] = self.flavors
 
         # Attributes
-        if self.attributes:
+        if self.attributes is not None:
             result["attributes"] = self.attributes
 
         return result
@@ -350,6 +369,28 @@ class Release:
         """Check if the release is archived."""
         return self.lifecycle.is_archived()
 
+    @staticmethod
+    def default_name(release_type: "ReleaseType", version: "Version") -> str:
+        """
+        Generate the canonical release name for a type and version.
+
+        Examples: ``next``, ``major-27``, ``minor-2017.0.0``, ``nightly-1990.0``.
+        This is the single source of truth for release-name construction.
+        """
+        if release_type == ReleaseType.NEXT:
+            return "next"
+        if release_type == ReleaseType.MAJOR:
+            return f"major-{version.major}"
+        return f"{release_type.value}-{version.to_string(release_type)}"
+
+    @staticmethod
+    def github_release_url(version: "Version", release_type: "ReleaseType") -> str:
+        """Build the GitHub release URL for a minor release."""
+        return (
+            "https://github.com/gardenlinux/gardenlinux/releases/tag/"
+            f"{version.to_string(release_type)}"
+        )
+
 
 class ReleaseCollection:
     """
@@ -387,14 +428,19 @@ class ReleaseCollection:
     def filter_version(
         self, major: int, minor: Optional[int] = None, patch: Optional[int] = None
     ) -> "ReleaseCollection":
-        """Filter releases by version components."""
+        """
+        Filter releases by version components.
+
+        Missing minor/patch on a release are treated as 0 when a filter value
+        is supplied, matching the query tool's historical semantics.
+        """
         return ReleaseCollection(
             [
                 r
                 for r in self._releases
                 if r.version.major == major
-                and (minor is None or r.version.minor == minor)
-                and (patch is None or r.version.patch == patch)
+                and (minor is None or (r.version.minor or 0) == minor)
+                and (patch is None or (r.version.patch or 0) == patch)
             ]
         )
 

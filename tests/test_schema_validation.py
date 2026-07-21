@@ -3,7 +3,7 @@ Unit tests for schema validation logic.
 """
 
 import pytest
-from glrd.manage import validate_input_version_format
+from glrd.validation import validate_input_version_format
 
 
 @pytest.mark.unit

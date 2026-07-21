@@ -3,13 +3,11 @@ import json
 import logging
 import os
 import sys
-import tempfile
 from datetime import datetime
 
 import boto3
 import pytz
 import yaml
-from botocore.exceptions import ClientError
 from dateutil.relativedelta import relativedelta
 from deepdiff.diff import DeepDiff
 
@@ -21,18 +19,30 @@ from glrd.git import (
     create_initial_nightly_releases,
 )
 from glrd.query import load_all_releases
-from glrd.s3 import download_all_s3_files, upload_all_local_files
+from glrd.release import (
+    GitInfo,
+    Lifecycle,
+    LifecyclePhase,
+    Release,
+    ReleaseType,
+    Version,
+    parse_release_name as model_parse_release_name,
+)
+from glrd.s3 import (
+    create_s3_bucket,
+    download_all_s3_files,
+    merge_existing_s3_data,
+    save_output_file,
+    upload_all_local_files,
+    upload_to_s3,
+)
 from glrd.validation import validate_input_version_format, validate_all_releases
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,
-    isodate_to_timestamp,
-    timestamp_to_isodate,
     get_version,
-    NoAliasDumper,
-    get_flavors_from_git,
-    get_s3_artifacts_data,
-    get_flavors_from_s3_artifacts,
+    merge_input_data,
+    resolve_flavors,
     split_releases_by_type,
 )
 
@@ -49,10 +59,11 @@ def glrd_query_type(args, release_type):
     try:
         releases = load_all_releases(
             release_type,
-            DEFAULTS["QUERY_INPUT_TYPE"],
-            DEFAULTS["QUERY_INPUT_URL"],
-            DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
-            DEFAULTS["QUERY_INPUT_FORMAT"],
+            getattr(args, "input_type", None) or DEFAULTS["QUERY_INPUT_TYPE"],
+            getattr(args, "input_url", None) or DEFAULTS["QUERY_INPUT_URL"],
+            getattr(args, "input_file_prefix", None)
+            or DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
+            getattr(args, "query_input_format", None) or DEFAULTS["QUERY_INPUT_FORMAT"],
         )
         if not releases:
             logging.warning(
@@ -74,18 +85,25 @@ def ensure_isodate_and_timestamp(lifecycle):
     Ensure both isodate and timestamp are set for all lifecycle fields
     (released, extended, eol). If only one is present, the other is
     computed.
+
+    This operates on the raw lifecycle dict (the JSON boundary) but delegates
+    the isodate<->timestamp conversion to the release model's
+    ``LifecyclePhase.ensure_complete`` so there is a single source of truth for
+    that logic.
     """
     for key in ["released", "extended", "eol"]:
-        if key in lifecycle and lifecycle[key]:
-            entry = lifecycle[key]
-            # Ensure if 'isodate' exists, 'timestamp' is computed
-            if "isodate" in entry and entry["isodate"] and not entry.get("timestamp"):
-                entry["timestamp"] = isodate_to_timestamp(entry["isodate"])
-            # Ensure if 'timestamp' exists, 'isodate' is computed
-            elif (
-                "timestamp" in entry and entry["timestamp"] and not entry.get("isodate")
-            ):
-                entry["isodate"] = timestamp_to_isodate(entry["timestamp"])
+        entry = lifecycle.get(key)
+        if not entry:
+            continue
+        phase = LifecyclePhase(
+            isodate=entry.get("isodate"),
+            timestamp=entry.get("timestamp"),
+        )
+        phase.ensure_complete()
+        if entry.get("isodate") and not entry.get("timestamp"):
+            entry["timestamp"] = phase.timestamp
+        elif entry.get("timestamp") and not entry.get("isodate"):
+            entry["isodate"] = phase.isodate
 
 
 def create_single_release(release_type, args, existing_releases):
@@ -162,15 +180,20 @@ def create_single_release(release_type, args, existing_releases):
             lifecycle_eol_isodate = None
             lifecycle_eol_timestamp = None
 
-    # Check if a manual commit is provided, otherwise use git commit at the given time
-    if args.commit:
-        commit = args.commit
-        if len(commit) != 40:
-            logging.error("Error: Invalid commit hash. Must be 40 characters.")
-            sys.exit(ERROR_CODES["validation_error"])
-        commit_short = commit[:8]
-    else:
-        commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
+    # Resolve the git commit only for release types that store it
+    # (minor, nightly, dev). 'next' and 'major' releases do not carry a commit,
+    # so we avoid the network lookup (git clone) entirely for them.
+    commit = None
+    commit_short = None
+    if release_type in ("minor", "nightly", "dev"):
+        if args.commit:
+            commit = args.commit
+            if len(commit) != 40:
+                logging.error("Error: Invalid commit hash. Must be 40 characters.")
+                sys.exit(ERROR_CODES["validation_error"])
+            commit_short = commit[:8]
+        else:
+            commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
 
     # Check if a manual version is provided, otherwise use garden version for the date
     if args.create == "next":
@@ -225,103 +248,76 @@ def create_single_release(release_type, args, existing_releases):
     # Create version object
     version = {"major": major, "minor": minor, "patch": patch}
 
-    flavors = get_flavors_from_git(commit)
+    # Flavors only apply to release types that carry a git commit.
+    flavors = []
+    if release_type in ("minor", "nightly", "dev"):
+        flavors = resolve_flavors(
+            commit, version, skip=getattr(args, "no_flavors", False)
+        )
+        if not flavors:
+            logging.info(
+                f"No flavors found anywhere for version {version} "
+                f"(commit {commit_short})"
+            )
 
-    # Only if no flavors found in flavors.yaml, try S3
-    if not flavors:
-        logging.info("No flavors found in flavors.yaml, checking S3 artifacts...")
-        # Get artifacts data from S3 with caching
-        # Get S3 artifacts using gardenlinux library
-        artifacts_data = get_s3_artifacts_data(
-            DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
-            DEFAULTS["ARTIFACTS_S3_PREFIX"],
-            DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
+    # Build the release using the domain model (single source of truth for
+    # name generation, version shape, and serialization).
+    rtype = ReleaseType(release_type)
+    version_obj = Version(major, minor, patch)
+
+    released_phase = LifecyclePhase(
+        isodate=lifecycle_released_isodate,
+        timestamp=lifecycle_released_timestamp,
+    )
+
+    if rtype in (ReleaseType.NEXT, ReleaseType.MAJOR):
+        lifecycle = Lifecycle(
+            released=released_phase,
+            extended=LifecyclePhase(
+                isodate=lifecycle_extended_isodate,
+                timestamp=lifecycle_extended_timestamp,
+            ),
+            eol=LifecyclePhase(
+                isodate=lifecycle_eol_isodate,
+                timestamp=lifecycle_eol_timestamp,
+            ),
+        )
+        release_obj = Release(
+            name=Release.default_name(rtype, version_obj),
+            type=rtype,
+            version=version_obj,
+            lifecycle=lifecycle,
+        )
+    elif rtype == ReleaseType.MINOR:
+        lifecycle = Lifecycle(
+            released=released_phase,
+            eol=LifecyclePhase(
+                isodate=lifecycle_eol_isodate,
+                timestamp=lifecycle_eol_timestamp,
+            ),
+        )
+        release_obj = Release(
+            name=Release.default_name(rtype, version_obj),
+            type=rtype,
+            version=version_obj,
+            lifecycle=lifecycle,
+            git=GitInfo(commit=commit, commit_short=commit_short),
+            github={"release": Release.github_release_url(version_obj, rtype)},
+            flavors=flavors,
+            attributes={"source_repo": True},
+        )
+    else:  # dev, nightly
+        release_obj = Release(
+            name=Release.default_name(rtype, version_obj),
+            type=rtype,
+            version=version_obj,
+            lifecycle=Lifecycle(released=released_phase),
+            git=GitInfo(commit=commit, commit_short=commit_short),
+            flavors=flavors,
+            attributes={"source_repo": True},
         )
 
-        if artifacts_data:
-            flavors = get_flavors_from_s3_artifacts(artifacts_data, version, commit)
-        else:
-            logging.warning("No artifacts data available from S3")
-
-    if not flavors:
-        logging.info(
-            f"No flavors found anywhere for version {version} (commit {commit_short})"
-        )
-
-    # Create release data
-    release = {}
-    release["type"] = f"{release_type}"
-    release["version"] = {}
-    release["version"]["major"] = major
-    release["lifecycle"] = {}
-    release["lifecycle"]["released"] = {}
-    release["lifecycle"]["released"]["isodate"] = lifecycle_released_isodate
-    release["lifecycle"]["released"]["timestamp"] = lifecycle_released_timestamp
-
-    if release_type in ["dev", "nightly"]:
-        # Create name and version based on schema version
-        if major >= 2017:
-            # v2 schema: include patch version
-            release["name"] = f"{release_type}-{major}.{minor}.{patch}"
-            release["version"]["minor"] = minor
-            release["version"]["patch"] = patch
-        else:
-            # v1 schema: exclude patch version
-            release["name"] = f"{release_type}-{major}.{minor}"
-            release["version"]["minor"] = minor
-            # Don't set patch for v1 schema releases
-
-        release["git"] = {}
-        release["git"]["commit"] = commit
-        release["git"]["commit_short"] = commit_short
-        release["flavors"] = flavors
-        release["attributes"] = {}
-        release["attributes"]["source_repo"] = True
-    elif release_type == "next":
-        release["name"] = f"{release_type}"
-        release["lifecycle"]["extended"] = {}
-        release["lifecycle"]["extended"]["isodate"] = lifecycle_extended_isodate
-        release["lifecycle"]["extended"]["timestamp"] = lifecycle_extended_timestamp
-        release["lifecycle"]["eol"] = {}
-        release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
-        release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-    elif release_type == "major":
-        release["name"] = f"{release_type}-{major}"
-        release["lifecycle"]["extended"] = {}
-        release["lifecycle"]["extended"]["isodate"] = lifecycle_extended_isodate
-        release["lifecycle"]["extended"]["timestamp"] = lifecycle_extended_timestamp
-        release["lifecycle"]["eol"] = {}
-        release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
-        release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-    elif release_type == "minor":
-        # Create name and version based on schema version
-        if major >= 2017:
-            # v2 schema: include patch version
-            release["name"] = f"{release_type}-{major}.{minor}.{patch}"
-            release["version"]["minor"] = minor
-            release["version"]["patch"] = patch
-            github_version = f"{major}.{minor}.{patch}"
-        else:
-            # v1 schema: exclude patch version
-            release["name"] = f"{release_type}-{major}.{minor}"
-            release["version"]["minor"] = minor
-            # Don't set patch for v1 schema releases
-            github_version = f"{major}.{minor}"
-
-        release["lifecycle"]["eol"] = {}
-        release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
-        release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-        release["git"] = {}
-        release["git"]["commit"] = commit
-        release["git"]["commit_short"] = commit_short
-        release["github"] = {}
-        release["github"][
-            "release"
-        ] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{github_version}"
-        release["flavors"] = flavors
-        release["attributes"] = {}
-        release["attributes"]["source_repo"] = True
-
+    release = release_obj.to_dict()
     logging.debug(f"Release '{release['name']}' created.")
     return release
 
@@ -507,19 +503,6 @@ def update_release(
     logging.debug(f"Release '{args.update}' will be updated.")
 
 
-def merge_input_data(existing_releases, new_releases):
-    """Merge two lists of releases, updating existing releases with new releases."""
-    # Create a dictionary of releases by name from existing_releases
-    releases_by_name = {release["name"]: release for release in existing_releases}
-
-    # Update or add releases from new_data
-    for new_release in new_releases:
-        releases_by_name[new_release["name"]] = new_release
-
-    # Return the merged list of releases
-    return list(releases_by_name.values())
-
-
 def set_latest_minor_eol_to_major(major_releases, minor_releases):
     """Set the EOL of each minor version to the next higher minor version,
     and the EOL of the latest minor version to match the major release."""
@@ -616,45 +599,18 @@ def load_input_stdin():
 
 
 def parse_release_name(release_name):
-    """Parse the release name in the format 'type-major.minor.patch' or
-    'type-major.minor' or 'type-major'."""
-    valid_types = ["next", "major", "minor", "nightly", "dev"]
-    type_and_version = release_name.split("-", 1)
-    if len(type_and_version) != 2:
-        logging.error(
-            "Error: Invalid release name format. Expected "
-            "'type-major.minor.patch' or 'type-major.minor' or 'type-major'"
-        )
-        sys.exit(ERROR_CODES["validation_error"])
-    release_type = type_and_version[0]
-    if release_type not in valid_types:
-        logging.error(
-            f"Error: Invalid release type '{release_type}'. "
-            f"Must be one of {', '.join(valid_types)}."
-        )
-        sys.exit(ERROR_CODES["validation_error"])
-    version = type_and_version[1]
-    version_parts = version.split(".")
+    """Parse a release name into (type, major, minor, patch).
+
+    Thin wrapper around :func:`glrd.release.parse_release_name` that converts
+    the model's ``ValueError`` into the CLI's error-exit behavior. The release
+    model is the single source of truth for name parsing.
+    """
     try:
-        if len(version_parts) == 3:
-            major = int(version_parts[0])
-            minor = int(version_parts[1])
-            patch = int(version_parts[2])
-        elif len(version_parts) == 2:
-            major = int(version_parts[0])
-            minor = int(version_parts[1])
-            patch = None
-        elif len(version_parts) == 1:
-            major = int(version_parts[0])
-            minor = None
-            patch = None
-        else:
-            logging.error("Error: Invalid version format in release name.")
-            sys.exit(ERROR_CODES["validation_error"])
-    except ValueError:
-        logging.error("Error: Major, minor and patch versions must be integers.")
+        release_type, major, minor, patch = model_parse_release_name(release_name)
+    except ValueError as exc:
+        logging.error(f"Error: {exc}")
         sys.exit(ERROR_CODES["validation_error"])
-    return release_type, major, minor, patch
+    return release_type.value, major, minor, patch
 
 
 def diff_releases(existing_merged_releases, merged_releases):
@@ -707,171 +663,10 @@ def diff_releases(existing_merged_releases, merged_releases):
                 ]:
                     changes_list = sorted(list(changes))
                     for change in changes_list:
-                        # formatted_change = change.replace("root", "")  # unused
-                        pass
-
-
-def save_output_file(data, filename, format="yaml"):
-    """Save the data to a file in the specified format."""
-    with open(filename, "w") as file:
-        if format == "yaml":
-            yaml.dump(
-                data,
-                file,
-                default_flow_style=False,
-                sort_keys=False,
-                Dumper=NoAliasDumper,
-            )
-        else:
-            # Optimize JSON by removing unnecessary spaces
-            json.dump(data, file, separators=(",", ":"), ensure_ascii=False)
-
-
-def create_s3_bucket(args, bucket_name=None, region=None):
-    """Create an S3 bucket for storing releases data."""
-    if not bucket_name:
-        bucket_name = args.s3_bucket_name
-    if not region:
-        region = args.s3_bucket_region
-    try:
-        s3_client = boto3.client("s3", region_name=region)
-        location = {"LocationConstraint": region}
-        s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration=location)
-        logging.info(f"Bucket '{bucket_name}' created successfully.")
-        s3_client.put_bucket_tagging(
-            Bucket=bucket_name,
-            Tagging={
-                "TagSet": [
-                    {
-                        "Key": "sec-by-def-public-storage-exception",
-                        "Value": "enabled",
-                    },
-                    {
-                        "Key": "sec-by-def-objectversioning-exception",
-                        "Value": "enabled",
-                    },
-                    {
-                        "Key": "sec-by-def-encrypt-storage-exception",
-                        "Value": "enabled",
-                    },
-                ]
-            },
-        )
-        logging.info(f"Tags added to bucket '{bucket_name}'.")
-        s3_client.put_public_access_block(
-            Bucket=bucket_name,
-            PublicAccessBlockConfiguration={
-                "BlockPublicAcls": False,
-                "IgnorePublicAcls": False,
-                "BlockPublicPolicy": False,
-                "RestrictPublicBuckets": False,
-            },
-        )
-        logging.info(
-            f"Public access block settings disabled for bucket '{bucket_name}'."
-        )
-        bucket_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                # Allow public read access to all objects in the bucket
-                {
-                    "Sid": "PublicReadGetObject",
-                    "Effect": "Allow",
-                    "Principal": "*",
-                    "Action": "s3:GetObject",
-                    "Resource": f"arn:aws:s3:::{bucket_name}/*",
-                },
-                # Deny non-SSL access
-                {
-                    "Sid": "AllowSSLRequestsOnly",
-                    "Effect": "Deny",
-                    "Principal": "*",
-                    "Action": "s3:*",
-                    "Resource": [
-                        "arn:aws:s3:::gardenlinux-glrd",
-                        "arn:aws:s3:::gardenlinux-glrd/*",
-                    ],
-                    "Condition": {"Bool": {"aws:SecureTransport": "false"}},
-                },
-            ],
-        }
-        s3_client.put_bucket_policy(
-            Bucket=bucket_name, Policy=json.dumps(bucket_policy)
-        )
-        logging.info(
-            f"Bucket '{bucket_name}' made public and denied non-SSL access with a bucket policy."
-        )
-    except ClientError as e:
-        logging.error(f"Error creating bucket: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
-
-
-def upload_to_s3(file_path, bucket_name, bucket_key):
-    """Upload a file to an S3 bucket."""
-    s3_client = boto3.client("s3")
-    try:
-        s3_client.upload_file(file_path, bucket_name, bucket_key)
-        logging.debug(f"Uploaded '{file_path}' to 's3://{bucket_name}/{bucket_key}'.")
-    except ClientError as e:
-        logging.error(f"Error uploading {file_path} to S3: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
-
-
-def download_from_s3(bucket_name, bucket_key, local_file):
-    """Download a file from an S3 bucket to a local file."""
-    s3_client = boto3.client("s3")
-    try:
-        s3_client.download_file(bucket_name, bucket_key, local_file)
-        logging.debug(
-            f"Downloaded 's3://{bucket_name}/{bucket_key}' to '{local_file}'."
-        )
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "404":
-            logging.warning(
-                f"No existing file found at 's3://{bucket_name}/{bucket_key}', "
-                f"starting with a fresh file."
-            )
-            return None  # No existing file, so we return None
-        logging.error(f"Error downloading from S3: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
-
-
-def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
-    """Download, merge, and return the merged data using a temporary file."""
-    # Use a temporary file that will be automatically deleted when closed
-    with tempfile.NamedTemporaryFile(delete=True, mode="w+") as temp_file:
-        # Download existing releases.json from S3 if it exists
-        download_from_s3(bucket_name, bucket_key, temp_file.name)
-
-        # Load existing data if the file was successfully downloaded
-        try:
-            temp_file.seek(0)  # Go to the start of the file to read the contents
-            with open(temp_file.name, "r") as f:
-                file_contents = f.read()  # Read file contents as a string
-                existing_data = json.loads(file_contents)  # Load JSON from string
-                # Ensure we're working with a list
-                existing_releases = (
-                    existing_data
-                    if isinstance(existing_data, list)
-                    else existing_data.get("releases", [])
-                )
-        except (json.JSONDecodeError, FileNotFoundError):
-            logging.warning(
-                "Could not decode the existing JSON from S3 or no file "
-                "exists. Starting with a fresh file."
-            )
-            existing_releases = []
-
-        # Ensure new_data is treated as a list
-        new_releases = (
-            new_data if isinstance(new_data, list) else new_data.get("releases", [])
-        )
-
-        # Use the merge function to merge new and existing releases
-        merged_releases = merge_input_data(existing_releases, new_releases)
-
-        # Return the merged data as a list
-        return merged_releases
+                        formatted_change = str(change).replace("root", "")
+                        logging.info(
+                            f"{release_name} - {change_type}: {formatted_change}"
+                        )
 
 
 def handle_releases(args):
@@ -882,6 +677,10 @@ def handle_releases(args):
 
     if args.output_all:
         download_all_s3_files(args.s3_bucket_name, args.s3_bucket_prefix)
+        return
+
+    if args.s3_create_bucket:
+        create_s3_bucket(args)
         return
 
     if not args.s3_update:
@@ -1206,6 +1005,39 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "--input-type",
+        choices=["file", "url"],
+        default=DEFAULTS["QUERY_INPUT_TYPE"],
+        help="Where existing releases are queried from when not using "
+        "--no-query: 'file' (local) or 'url' (default). Use 'file' to run "
+        "fully offline.",
+    )
+
+    parser.add_argument(
+        "--input-url",
+        type=str,
+        default=DEFAULTS["QUERY_INPUT_URL"],
+        help="Base URL used to query existing releases (default: "
+        "gardenlinux-glrd S3 URL). Only used with '--input-type url'.",
+    )
+
+    parser.add_argument(
+        "--input-file-prefix",
+        type=str,
+        default=DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
+        help="Prefix used to query existing releases from local files "
+        "(default: releases). Only used with '--input-type file'.",
+    )
+
+    parser.add_argument(
+        "--query-input-format",
+        choices=["yaml", "json"],
+        default=DEFAULTS["QUERY_INPUT_FORMAT"],
+        help="Format of the existing releases queried when not using "
+        "--no-query (default: json).",
+    )
+
+    parser.add_argument(
         "--output-format",
         type=str,
         choices=["yaml", "json"],
@@ -1277,6 +1109,13 @@ def parse_arguments():
         "--commit",
         type=str,
         help="Manually specify the git commit hash (40 characters).",
+    )
+    parser.add_argument(
+        "--no-flavors",
+        action="store_true",
+        help="Do not resolve flavors (skips the Git clone and S3 lookup). "
+        "Useful for offline use and tests. Can also be enabled via the "
+        "GLRD_SKIP_FLAVORS environment variable.",
     )
     parser.add_argument(
         "--lifecycle-released-isodatetime",
