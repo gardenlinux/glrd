@@ -288,16 +288,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "orbit",
         "elementId": "oGp3gDIowEf0ERjU64X7W",
-        "focus": 0.000018815675508124198,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          1
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "vgiASgTEJV_fZJ3b-wYQS",
-        "focus": 0.000027328006585552104,
-        "gap": 5.2999999999999545,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          0
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -353,16 +357,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "orbit",
         "elementId": "vgiASgTEJV_fZJ3b-wYQS",
-        "focus": -0.39821509355663853,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.6991075467783207,
+          0.6991075467783244
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "Ja2YwuSfTNbOWarmcKJvD",
-        "focus": 0.7085122328658864,
-        "gap": 4.193621663720023,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.9999999999999999,
+          0.5001
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -418,16 +426,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "orbit",
         "elementId": "NvPxjYidT47CfP8AvmSkA",
-        "focus": -0.0000019013873514802402,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          1
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "QkW758QBmPZaI2wwGzswp",
-        "focus": -0.000004947918725731112,
-        "gap": 5.2999999999999545,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          0
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -483,16 +495,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "orbit",
         "elementId": "QkW758QBmPZaI2wwGzswp",
-        "focus": 0.000004947918725731112,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          1
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "oGp3gDIowEf0ERjU64X7W",
-        "focus": -0.000018815675508124198,
-        "gap": 5.2999999999999545,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          0
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -548,16 +564,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "orbit",
         "elementId": "8IV3nVg7OdJdXtZWZbeGT",
-        "focus": -0.11130127747141697,
-        "gap": 1.6353931620028561,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.5001,
+          1
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "QkW758QBmPZaI2wwGzswp",
-        "focus": 0.8552810381755851,
-        "gap": 9.952536539447237,
-        "fixedPoint": null
+        "fixedPoint": [
+          1.0000000000000009,
+          0.5001
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -987,8 +1007,8 @@
     },
     {
       "type": "text",
-      "version": 675,
-      "versionNonce": 796977407,
+      "version": 692,
+      "versionNonce": 562934999,
       "index": "b1P",
       "isDeleted": false,
       "id": "B4GOUrfNKunbU2Teev9wH",
@@ -1002,8 +1022,8 @@
       "y": 810.25,
       "strokeColor": "#1e1e1e",
       "backgroundColor": "transparent",
-      "width": 696.4033749745981,
-      "height": 720,
+      "width": 677.6009650316732,
+      "height": 920,
       "seed": 876634341,
       "groupIds": [],
       "frameId": null,
@@ -1014,16 +1034,16 @@
           "type": "arrow"
         }
       ],
-      "updated": 1729585783352,
+      "updated": 1784637372633,
       "link": null,
       "locked": false,
       "fontSize": 16,
       "fontFamily": 8,
-      "text": "❯ glrd --type major --version 1312 --output-format yaml\n- name: major-1312\n  type: major\n  version:\n    major: 1312\n  lifecycle:\n    released:\n      isodate: '2023-11-16'\n      timestamp: 1700136050\n    extended:\n      isodate: '2024-05-03'\n      timestamp: 1714687200\n    eol:\n      isodate: '2024-08-03'\n      timestamp: 1722636000\n\n❯ glrd --type minor --version 1312.0 --output-format yaml\n- name: minor-1312.0\n  type: minor\n  version:\n    major: 1312\n    minor: 0\n  lifecycle:\n    released:\n      isodate: '2023-11-16'\n      timestamp: 1700089200\n    eol:\n      isodate: '2023-11-23'\n      timestamp: 1700694000\n  git:\n    commit: 40b9db2c54c9cac78bcf62a96f5386ac33c1bdab\n    commit_short: 40b9db2\n  github:\n    release: https://github.com/gardenlinux/gardenlinux/releases/tag/1312.0\n\n",
+      "text": "❯ glrd --type major --version 2150 --output-format yaml\nreleases:\n- name: major-2150\n  type: major\n  version:\n    major: 2150\n  lifecycle:\n    released:\n      isodate: '2026-02-23'\n      timestamp: 1771835792\n    extended:\n      isodate: '2026-08-23'\n      timestamp: 1787474192\n    eol:\n      isodate: '2027-02-23'\n      timestamp: 1803340800\n  flavors: {}\n  oci: ghcr.io/gardenlinux/gardenlinux:2150\n\n\n❯ glrd --type minor --version 2150.7.0 --output-format yaml\nreleases:\n- name: minor-2150.7.0\n  type: minor\n  version:\n    major: 2150\n    minor: 7\n    patch: 0\n  lifecycle:\n    released:\n      isodate: '2026-07-15'\n      timestamp: 1784115456\n    eol:\n      isodate: '2027-02-23'\n      timestamp: 1803340800\n  git:\n    commit: 5e66e8da34e90e9c257662f4a80142ebe11ca346\n    commit_short: 5e66e8da\n  github:\n    release: https://github.com/gardenlinux/gardenlinux/releases/tag/2150.7.0\n  flavors: {}\n  oci: ghcr.io/gardenlinux/gardenlinux:2150.7.0\n  attributes:\n    source_repo: true\n\n",
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
-      "originalText": "❯ glrd --type major --version 1312 --output-format yaml\n- name: major-1312\n  type: major\n  version:\n    major: 1312\n  lifecycle:\n    released:\n      isodate: '2023-11-16'\n      timestamp: 1700136050\n    extended:\n      isodate: '2024-05-03'\n      timestamp: 1714687200\n    eol:\n      isodate: '2024-08-03'\n      timestamp: 1722636000\n\n❯ glrd --type minor --version 1312.0 --output-format yaml\n- name: minor-1312.0\n  type: minor\n  version:\n    major: 1312\n    minor: 0\n  lifecycle:\n    released:\n      isodate: '2023-11-16'\n      timestamp: 1700089200\n    eol:\n      isodate: '2023-11-23'\n      timestamp: 1700694000\n  git:\n    commit: 40b9db2c54c9cac78bcf62a96f5386ac33c1bdab\n    commit_short: 40b9db2\n  github:\n    release: https://github.com/gardenlinux/gardenlinux/releases/tag/1312.0\n\n",
+      "originalText": "❯ glrd --type major --version 2150 --output-format yaml\nreleases:\n- name: major-2150\n  type: major\n  version:\n    major: 2150\n  lifecycle:\n    released:\n      isodate: '2026-02-23'\n      timestamp: 1771835792\n    extended:\n      isodate: '2026-08-23'\n      timestamp: 1787474192\n    eol:\n      isodate: '2027-02-23'\n      timestamp: 1803340800\n  flavors: {}\n  oci: ghcr.io/gardenlinux/gardenlinux:2150\n\n\n❯ glrd --type minor --version 2150.7.0 --output-format yaml\nreleases:\n- name: minor-2150.7.0\n  type: minor\n  version:\n    major: 2150\n    minor: 7\n    patch: 0\n  lifecycle:\n    released:\n      isodate: '2026-07-15'\n      timestamp: 1784115456\n    eol:\n      isodate: '2027-02-23'\n      timestamp: 1803340800\n  git:\n    commit: 5e66e8da34e90e9c257662f4a80142ebe11ca346\n    commit_short: 5e66e8da\n  github:\n    release: https://github.com/gardenlinux/gardenlinux/releases/tag/2150.7.0\n  flavors: {}\n  oci: ghcr.io/gardenlinux/gardenlinux:2150.7.0\n  attributes:\n    source_repo: true\n\n",
       "autoResize": true,
       "lineHeight": 1.25
     },
@@ -1099,16 +1119,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "inside",
         "elementId": "vgiASgTEJV_fZJ3b-wYQS",
-        "focus": -0.5250123551058682,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.7427461602544223,
+          0.9601372874197254
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "6NPB-pPlaLq_OppZlAFUO",
-        "focus": 0.6422555999580892,
-        "gap": 3.8714285714288508,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.9999999999999999,
+          0.5001
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -1275,16 +1299,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "inside",
         "elementId": "vgiASgTEJV_fZJ3b-wYQS",
-        "focus": -0.7475494417564867,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.8635590370696222,
+          0.9974939683851858
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "ApafzRm37lRl_3pKEtTI7",
-        "focus": 0.6467335558946289,
-        "gap": 4.193621663720251,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.9999999999999999,
+          0.5001
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -1451,16 +1479,20 @@
       "link": null,
       "locked": false,
       "startBinding": {
+        "mode": "inside",
         "elementId": "vgiASgTEJV_fZJ3b-wYQS",
-        "focus": -0.9571021220589234,
-        "gap": 1,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.9797317112030263,
+          0.955248138921785
+        ]
       },
       "endBinding": {
+        "mode": "orbit",
         "elementId": "_qB7ZIHNTLwQK9IHTA-N5",
-        "focus": 0.42417147654495535,
-        "gap": 3.8714285714288508,
-        "fixedPoint": null
+        "fixedPoint": [
+          0.9999999999999999,
+          0.5001
+        ]
       },
       "lastCommittedPoint": null,
       "startArrowhead": null,
@@ -1557,8 +1589,8 @@
     },
     {
       "type": "text",
-      "version": 1126,
-      "versionNonce": 89202097,
+      "version": 1159,
+      "versionNonce": 1622190775,
       "index": "b1u",
       "isDeleted": false,
       "id": "rKCTpOb0-cHiOk_Nkdn_t",
@@ -1572,23 +1604,23 @@
       "y": 805.9642857142856,
       "strokeColor": "#1e1e1e",
       "backgroundColor": "transparent",
-      "width": 398.2014996387941,
+      "width": 413.5967720387391,
       "height": 180,
       "seed": 575922865,
       "groupIds": [],
       "frameId": null,
       "roundness": null,
       "boundElements": [],
-      "updated": 1729585810063,
+      "updated": 1784637329966,
       "link": null,
       "locked": false,
       "fontSize": 16,
       "fontFamily": 8,
-      "text": "❯ glrd-manage --s3-update \\\n              --create major \\\n              --version 1312\nINFO: major-1312 - release will be created.\n\n❯ glrd-manage --s3-update \\\n              --create minor \\\n              --version 1312.0\nINFO: minor-1312.0 - release will be created.",
+      "text": "❯ glrd-manage --s3-update \\\n              --create major \\\n              --version 2150\nINFO: major-2150 - release will be created.\n\n❯ glrd-manage --s3-update \\\n              --create minor \\\n              --version 2150.7.0\nINFO: minor-2150.7.0 - release will be created.",
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
-      "originalText": "❯ glrd-manage --s3-update \\\n              --create major \\\n              --version 1312\nINFO: major-1312 - release will be created.\n\n❯ glrd-manage --s3-update \\\n              --create minor \\\n              --version 1312.0\nINFO: minor-1312.0 - release will be created.",
+      "originalText": "❯ glrd-manage --s3-update \\\n              --create major \\\n              --version 2150\nINFO: major-2150 - release will be created.\n\n❯ glrd-manage --s3-update \\\n              --create minor \\\n              --version 2150.7.0\nINFO: minor-2150.7.0 - release will be created.",
       "autoResize": true,
       "lineHeight": 1.25
     }
@@ -1597,7 +1629,8 @@
     "gridSize": 20,
     "gridStep": 5,
     "gridModeEnabled": false,
-    "viewBackgroundColor": "#ffffff"
+    "viewBackgroundColor": "#ffffff",
+    "lockedMultiSelections": {}
   },
   "files": {}
 }
