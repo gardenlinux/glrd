@@ -6,12 +6,12 @@ import sys
 
 import boto3
 
-from glrd.manage import download_all_s3_files, upload_all_local_files
+from glrd.s3 import download_all_s3_files, upload_all_local_files
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,
     get_version,
-    get_flavors_from_git,
+    resolve_flavors,
     get_s3_artifacts_data,
     get_flavors_from_s3_artifacts,
 )
@@ -172,25 +172,7 @@ def update_flavors(release):
     commit = release["git"]["commit"]
     version = release["version"]
 
-    # First try flavors.yaml using gardenlinux library
-    flavors = get_flavors_from_git(commit)
-
-    # If no flavors found, try S3
-    if not flavors:
-        logger.info(
-            f"No flavors found in flavors.yaml for {release['name']}, checking S3..."
-        )
-        # Get S3 artifacts using gardenlinux library
-        artifacts_data = get_s3_artifacts_data(
-            DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
-            DEFAULTS["ARTIFACTS_S3_PREFIX"],
-            DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
-        )
-
-        if artifacts_data:
-            flavors = get_flavors_from_s3_artifacts(artifacts_data, version, commit)
-        else:
-            logger.warning(f"No artifacts data available from S3 for {release['name']}")
+    flavors = resolve_flavors(commit, version)
 
     if flavors:
         release["flavors"] = flavors

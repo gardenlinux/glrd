@@ -9,6 +9,7 @@ import requests
 import tabulate
 import yaml
 
+from glrd.release import Release, ReleaseCollection, ReleaseType
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,
@@ -75,8 +76,7 @@ def get_version_string(version, release_type=None):
 
 def is_active_release(release, current_timestamp):
     """Check if the release is still active based on its EOL timestamp."""
-    eol_timestamp = release.get("lifecycle", {}).get("eol", {}).get("timestamp")
-    return eol_timestamp and eol_timestamp > current_timestamp
+    return Release.from_dict(release).lifecycle.is_active(current_timestamp)
 
 
 def filter_active_releases(releases):
@@ -89,8 +89,7 @@ def filter_active_releases(releases):
 
 def is_archived_release(release, current_timestamp):
     """Check if the release archived based on its EOL timestamp."""
-    eol_timestamp = release.get("lifecycle", {}).get("eol", {}).get("timestamp")
-    return eol_timestamp and eol_timestamp < current_timestamp
+    return Release.from_dict(release).lifecycle.is_archived(current_timestamp)
 
 
 def filter_archived_releases(releases):
@@ -108,32 +107,31 @@ def filter_releases(releases, release_types=None, version=None):
     Filter releases by type and/or version, respecting versioned schemas.
 
     Args:
-        releases: List of release objects to filter
+        releases: List of release objects (dicts) to filter
         release_types: Comma-separated string of release types to include
         version: Version string in format major.minor.patch (patch is optional)
 
     Returns:
-        Filtered list of releases
+        Filtered list of releases (dicts)
     """
+    collection = ReleaseCollection([Release.from_dict(r) for r in releases])
+
     if version:
         version_parts = version.split(".")
         major = int(version_parts[0])
         minor = int(version_parts[1]) if len(version_parts) > 1 else None
         patch = int(version_parts[2]) if len(version_parts) > 2 else None
-
-        releases = [
-            r
-            for r in releases
-            if r["version"]["major"] == major
-            and (minor is None or r["version"].get("minor", 0) == minor)
-            and (patch is None or r["version"].get("patch", 0) == patch)
-        ]
+        collection = collection.filter_version(major, minor, patch)
 
     if release_types:
-        release_types = release_types.split(",")
-        releases = [r for r in releases if r.get("type") in release_types]
+        valid = {rt.value for rt in ReleaseType}
+        # Unknown types are ignored (they simply match nothing), preserving the
+        # historical behavior where an invalid --type produced an empty result
+        # rather than an error.
+        types = [ReleaseType(t) for t in release_types.split(",") if t in valid]
+        collection = collection.by_types(types)
 
-    return releases
+    return collection.to_list()
 
 
 def find_latest_release(releases):
@@ -141,27 +139,14 @@ def find_latest_release(releases):
     Find the latest release by version, respecting versioned schemas.
 
     Args:
-        releases: List of release objects to search
+        releases: List of release objects (dicts) to search
 
     Returns:
-        The latest release object or None if no releases found
+        The latest release object (dict) or None if no releases found
     """
-
-    def get_version_key(release):
-        """Get version key for comparison, respecting versioned schemas."""
-        version = release["version"]
-        major = version["major"]
-        minor = version.get("minor", 0)
-        patch = version.get("patch", 0)
-
-        # For versions >= 2017.0.0, include patch in comparison
-        if major >= 2017:
-            return (major, minor, patch)
-        else:
-            # For versions < 2017.0.0, exclude patch from comparison
-            return (major, minor, 0)
-
-    return max(releases, key=get_version_key, default=None)
+    collection = ReleaseCollection([Release.from_dict(r) for r in releases])
+    latest = collection.latest()
+    return latest.to_dict() if latest else None
 
 
 def get_extended_maintenance(release):
@@ -364,41 +349,13 @@ def sort_releases(releases):
     Sort releases by version, respecting versioned schemas.
 
     Args:
-        releases: List of release objects to sort
+        releases: List of release objects (dicts) to sort
 
     Returns:
-        Sorted list of releases
+        Sorted list of releases (dicts)
     """
-
-    def parse_version_part(part):
-        if isinstance(part, int):
-            return part
-        elif isinstance(part, str):
-            if part.lower() == "next":
-                # Assign a special value to place 'next' releases appropriately
-                return float("inf")  # Place at the end
-            else:
-                # Handle other string versions if necessary
-                return -1
-        else:
-            return -1  # Default value for unexpected types
-
-    def sort_key(r):
-        """Get sort key for a release, respecting versioned schemas."""
-        version = r["version"]
-        major = parse_version_part(version.get("major"))
-        minor = parse_version_part(version.get("minor", -1))
-        patch = parse_version_part(version.get("patch", -1))
-
-        # For versions >= 2017.0.0, include patch in sorting
-        if isinstance(major, int) and major >= 2017:
-            return (major, minor, patch)
-        else:
-            # For versions < 2017.0.0 or non-integer majors (like 'next'),
-            # exclude patch from sorting
-            return (major, minor, 0)
-
-    return sorted(releases, key=sort_key)
+    collection = ReleaseCollection([Release.from_dict(r) for r in releases])
+    return [r.to_dict() for r in collection.sorted()]
 
 
 def load_releases(input_source, is_url=False):

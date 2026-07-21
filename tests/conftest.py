@@ -9,6 +9,21 @@ import pytest
 from pathlib import Path
 
 
+@pytest.fixture(autouse=True)
+def offline_environment(monkeypatch):
+    """
+    Force GLRD into fully offline mode for every test.
+
+    The tests must never touch the network or S3. Setting GLRD_SKIP_FLAVORS
+    makes glrd-manage/glrd-update skip flavor resolution (the Git clone and S3
+    lookup), and disabling the EC2 metadata endpoint prevents boto3 from
+    hanging on credential discovery. Because these are set via the environment,
+    they are inherited by the subprocesses that the integration tests spawn.
+    """
+    monkeypatch.setenv("GLRD_SKIP_FLAVORS", "1")
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+
 @pytest.fixture
 def test_dir():
     """Create a temporary directory for test files."""

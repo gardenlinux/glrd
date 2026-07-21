@@ -16,13 +16,12 @@ from typing import Any, Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from glrd.util import DEFAULTS, ERROR_CODES
+from glrd.util import DEFAULTS, ERROR_CODES, merge_input_data, NoAliasDumper
 
 
 def save_output_file(data: Dict[str, Any], filename: str, format: str = "yaml") -> None:
     """Save the data to a file in the specified format."""
     import yaml
-    from glrd.util import NoAliasDumper
 
     with open(filename, "w") as file:
         if format == "yaml":
@@ -153,8 +152,6 @@ def merge_existing_s3_data(
     bucket_name: str, bucket_key: str, local_file: str, new_data: Any
 ) -> List[Dict[str, Any]]:
     """Download, merge, and return the merged data using a temporary file."""
-    from glrd.manage import merge_input_data
-
     # Use a temporary file that will be automatically deleted when closed
     with tempfile.NamedTemporaryFile(delete=True, mode="w+") as temp_file:
         # Download existing releases.json from S3 if it exists

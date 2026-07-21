@@ -71,6 +71,22 @@ def split_releases_by_type(
     return result
 
 
+def merge_input_data(
+    existing_releases: List[Dict[str, Any]],
+    new_releases: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Merge two lists of releases, updating existing releases with new ones.
+
+    Releases are keyed by their ``name``; a release in ``new_releases``
+    replaces any existing release with the same name.
+    """
+    releases_by_name = {release["name"]: release for release in existing_releases}
+    for new_release in new_releases:
+        releases_by_name[new_release["name"]] = new_release
+    return list(releases_by_name.values())
+
+
 def run_subprocess(command: List[str], error_msg: str) -> str:
     """Run a subprocess command and return stdout, or exit with error."""
     result = subprocess.run(
@@ -258,6 +274,69 @@ def get_flavors_from_git(commit: str) -> List[str]:
     except Exception as exc:
         logging.debug(f"Could not get flavors from Git: {exc}")
         return []
+
+
+def skip_flavors_lookup() -> bool:
+    """
+    Return True if flavor resolution (Git clone / S3 lookup) should be skipped.
+
+    Flavor resolution requires network access (a Git clone of the Garden Linux
+    repository and/or an S3 listing). Skipping is useful for offline usage and
+    for tests, which must never touch the network or S3.
+
+    Skipping is enabled when the ``GLRD_SKIP_FLAVORS`` environment variable is
+    set to a truthy value (``1``, ``true``, ``yes``, ``on``; case-insensitive).
+    """
+    return os.environ.get("GLRD_SKIP_FLAVORS", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def resolve_flavors(
+    commit: str,
+    version: Dict[str, Any],
+    skip: bool = False,
+) -> List[str]:
+    """
+    Resolve the flavors for a release, trying Git first and S3 as a fallback.
+
+    This centralizes the previously duplicated git-then-S3 fallback logic used
+    by both ``glrd-manage`` (create) and ``glrd-update``.
+
+    Args:
+        commit: Git commit hash of the release.
+        version: Version dict with at least ``major`` (and optionally ``minor``).
+        skip: If True (or if ``skip_flavors_lookup()`` is True), no network
+              access is performed and an empty list is returned. This keeps the
+              operation fully offline.
+
+    Returns:
+        Sorted list of flavor strings (possibly empty).
+    """
+    if skip or skip_flavors_lookup():
+        logging.info("Skipping flavor lookup (offline mode / GLRD_SKIP_FLAVORS set).")
+        return []
+
+    # First try flavors.yaml from the Git repository.
+    flavors = get_flavors_from_git(commit)
+    if flavors:
+        return flavors
+
+    # Fall back to S3 artifacts.
+    logging.info("No flavors found in flavors.yaml, checking S3 artifacts...")
+    artifacts_data = get_s3_artifacts_data(
+        DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
+        DEFAULTS["ARTIFACTS_S3_PREFIX"],
+        DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
+    )
+    if artifacts_data:
+        return get_flavors_from_s3_artifacts(artifacts_data, version, commit)
+
+    logging.warning("No artifacts data available from S3")
+    return []
 
 
 def get_s3_artifacts_data(
