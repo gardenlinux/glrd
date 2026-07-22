@@ -3,44 +3,78 @@ Git operations for GLRD.
 
 This module provides functions for interacting with Git repositories
 and GitHub APIs to retrieve commit information and release data.
+
+Authentication note: GitHub API access (get_github_releases,
+get_git_commit_from_tag) requires the GITHUB_TOKEN environment variable to be
+set.
 """
 
-import json
 import logging
-import subprocess
+import shutil
 import sys
 import tempfile
 from datetime import datetime
 from typing import Optional, Tuple
 
+import pygit2
 import pytz
+
+from gardenlinux.git import Repository
+from gardenlinux.github import Client
 
 from glrd.util import DEFAULTS, ERROR_CODES, extract_version_data, isodate_to_timestamp
 
 # Global variable to cache the repository clone path
 _repo_clone_path: Optional[str] = None
 
+# Cached pygit2 Repository object (kept open while the clone is alive)
+_repo_instance: Optional[Repository] = None
+
 
 def get_github_releases() -> list:
-    """Fetch releases from the GitHub API using the 'gh' command."""
-    command = [
-        "gh",
-        "api",
-        "--paginate",
-        f"/repos/{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}/releases",
-    ]
-    result = subprocess.run(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    if result.returncode != 0:
-        logging.error(f"Error fetching GitHub releases: {result.stderr}")
+    """Fetch releases from the GitHub API via python-gardenlinux-lib (PyGithub).
+
+    Requires the GITHUB_TOKEN environment variable to be set.
+
+    Returns:
+        List of dicts with keys ``tag_name``, ``published_at``, ``html_url``
+        — the same shape previously returned by the ``gh`` CLI.
+    """
+    try:
+        client = Client()
+    except ValueError as exc:
+        logging.error(f"GitHub authentication error: {exc}")
         sys.exit(ERROR_CODES["subprocess_output_error"])
-    return json.loads(result.stdout)
+
+    try:
+        gh_repo = client.get_repo(
+            f"{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}"
+        )
+        releases = []
+        for release in gh_repo.get_releases():
+            published_at = ""
+            if release.published_at is not None:
+                published_at = release.published_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+            releases.append(
+                {
+                    "tag_name": release.tag_name,
+                    "published_at": published_at,
+                    "html_url": release.html_url,
+                }
+            )
+        return releases
+    except Exception as exc:
+        logging.error(f"Error fetching GitHub releases: {exc}")
+        sys.exit(ERROR_CODES["subprocess_output_error"])
 
 
 def get_git_commit_from_tag(tag: str) -> Tuple[str, str]:
-    """
-    Fetch the git commit hash for a given tag using the GitHub API.
+    """Fetch the git commit hash for a given tag via PyGithub.
+
+    Handles both lightweight and annotated tags: for annotated tags the
+    function dereferences the tag object to the underlying commit SHA.
+
+    Requires the GITHUB_TOKEN environment variable to be set.
 
     Args:
         tag: Git tag name
@@ -49,30 +83,29 @@ def get_git_commit_from_tag(tag: str) -> Tuple[str, str]:
         Tuple of (full_commit_sha, short_commit_sha)
     """
     try:
-        # Use the GitHub API to get the commit hash from the tag name
-        command = [
-            "gh",
-            "api",
-            f"/repos/{DEFAULTS['GL_REPO_OWNER']}/"
-            f"{DEFAULTS['GL_REPO_NAME']}/git/refs/tags/{tag}",
-            "--jq",
-            ".object.sha",
-        ]
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        client = Client()
+    except ValueError as exc:
+        logging.error(f"GitHub authentication error: {exc}")
+        sys.exit(ERROR_CODES["subprocess_output_error"])
+
+    try:
+        gh_repo = client.get_repo(
+            f"{DEFAULTS['GL_REPO_OWNER']}/{DEFAULTS['GL_REPO_NAME']}"
         )
+        ref = gh_repo.get_git_ref(f"tags/{tag}")
+        sha = ref.object.sha
+        obj_type = ref.object.type
 
-        if result.returncode != 0:
-            logging.error(f"Error fetching git commit for tag: {tag}, {result.stderr}")
-            sys.exit(ERROR_CODES["subprocess_output_missing"])
+        # Annotated tags point to a tag object, not directly to a commit.
+        # Dereference to reach the actual commit SHA.
+        if obj_type == "tag":
+            tag_obj = gh_repo.get_git_tag(sha)
+            sha = tag_obj.object.sha
+            logging.debug(f"Tag {tag} is annotated; dereferencing to commit {sha}")
 
-        commit = result.stdout.strip()
-        return (
-            commit,
-            commit[:8],
-        )  # Return full commit and shortened version
-    except Exception as e:
-        logging.error(f"Error fetching git commit for tag {tag}: {e}")
+        return sha, sha[:8]
+    except Exception as exc:
+        logging.error(f"Error fetching git commit for tag {tag}: {exc}")
         sys.exit(ERROR_CODES["subprocess_output_error"])
 
 
@@ -82,9 +115,12 @@ def get_git_commit_at_time(
     branch: str = "main",
     remote_repo: str = DEFAULTS["GL_REPO_URL"],
 ) -> Tuple[str, str]:
-    """
-    Fetch the git commit that was at a specific date and time in the
-    main branch, using a temporary cached git clone.
+    """Fetch the git commit that was current at a specific date and time.
+
+    Uses a module-level cached clone of the repository so that repeated calls
+    (e.g. when generating many nightly releases) only clone once.  The clone
+    is performed via ``gardenlinux.git.Repository.checkout_repo`` (pygit2)
+    and commit history is walked with ``pygit2``.
 
     Args:
         date: Date string in YYYY-MM-DD format
@@ -95,89 +131,45 @@ def get_git_commit_at_time(
     Returns:
         Tuple of (full_commit_sha, short_commit_sha)
     """
-    global _repo_clone_path
+    global _repo_clone_path, _repo_instance
 
-    # Convert the input date and time to the target timezone (UTC) and
-    # then to UTC
+    # Convert the input date and time to UTC epoch for comparison.
     target_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").astimezone(
         pytz.timezone("UTC")
     )
-    target_time_utc = target_time.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    target_epoch = int(target_time.astimezone(pytz.UTC).timestamp())
 
-    # If the repository hasn't been cloned yet, clone it to a dynamically
-    # created temp directory
-    if not _repo_clone_path:
-        # Create a temporary directory for cloning the repository
+    # Clone once and reuse on subsequent calls.
+    if _repo_clone_path is None or _repo_instance is None:
         temp_dir = tempfile.mkdtemp(prefix="glrd_temp_repo_")
-
-        # Perform the shallow clone
-        clone_command = [
-            "git",
-            "clone",
-            "--depth",
-            "1",
-            "--branch",
-            branch,
-            remote_repo,
-            temp_dir,
-        ]
-        clone_result = subprocess.run(
-            clone_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        if clone_result.returncode != 0:
-            logging.error(f"Error cloning remote repository: {clone_result.stderr}")
-            sys.exit(ERROR_CODES["subprocess_output_error"])
-
-        # Fetch full history to enable searching through commits by time
-        fetch_command = ["git", "fetch", "--unshallow"]
-        fetch_result = subprocess.run(
-            fetch_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=temp_dir,
-        )
-
-        if fetch_result.returncode != 0:
-            logging.error(
-                f"Error fetching full history from remote repository: {fetch_result.stderr}"
+        logging.debug(f"Cloning {remote_repo} into {temp_dir}")
+        try:
+            _repo_instance = Repository.checkout_repo(
+                git_directory=temp_dir,
+                repo_url=remote_repo,
+                branch=branch,
             )
+            _repo_clone_path = temp_dir
+        except Exception as exc:
+            _repo_instance = None
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logging.error(f"Error cloning remote repository: {exc}")
             sys.exit(ERROR_CODES["subprocess_output_error"])
 
-        # Cache the clone path to reuse it later
-        _repo_clone_path = temp_dir
-
-    # Use `git rev-list` to find the commit before the specified time
-    rev_list_command = [
-        "git",
-        "rev-list",
-        "-n",
-        "1",
-        "--before",
-        target_time_utc,
-        branch,
-    ]
-    rev_list_result = subprocess.run(
-        rev_list_command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=_repo_clone_path,
-    )
-
-    if rev_list_result.returncode != 0:
-        logging.error(
-            f"Error fetching git commit for {date} at {time}: {rev_list_result.stderr}"
-        )
+    # Walk commits in time order and find the latest one at or before the
+    # target time.
+    try:
+        head_commit = _repo_instance.revparse_single(f"origin/{branch}")
+        walker = _repo_instance.walk(head_commit.id, pygit2.enums.SortMode.TIME)
+        commit = None
+        for c in walker:
+            if c.commit_time <= target_epoch:
+                commit = str(c.id)
+                break
+    except Exception as exc:
+        logging.error(f"Error walking git history for {date} at {time}: {exc}")
         sys.exit(ERROR_CODES["subprocess_output_error"])
 
-    commit = rev_list_result.stdout.strip()
-
-    # Example of a debug message
     logging.debug(f"Found commit {commit} for {date} at {time}")
 
     if not commit:
@@ -188,15 +180,20 @@ def get_git_commit_at_time(
 
 
 def cleanup_temp_repo() -> None:
-    """
-    Clean up the temporary repository clone.
+    """Clean up the temporary repository clone.
+
+    Dereferences the cached pygit2 Repository object before removing the
+    directory so that pygit2 releases all file handles first.
 
     This function can be registered as an atexit handler.
     """
-    global _repo_clone_path
-    if _repo_clone_path:
-        import shutil
+    global _repo_clone_path, _repo_instance
 
+    # Dereference the pygit2 object before rmtree so file handles are released.
+    if _repo_instance is not None:
+        _repo_instance = None
+
+    if _repo_clone_path:
         shutil.rmtree(_repo_clone_path, ignore_errors=True)
         _repo_clone_path = None
 
@@ -371,6 +368,8 @@ def create_initial_nightly_releases(major_releases: list) -> list:
     Returns:
         List of nightly release dicts
     """
+    from datetime import timedelta
+
     nightly_releases = []
 
     # Sort major releases by released timestamp
@@ -427,8 +426,6 @@ def create_initial_nightly_releases(major_releases: list) -> list:
             nightly_releases.append(release)
             logging.debug(f"Nightly release '{release['name']}' created.")
             # Move to next day
-            from datetime import timedelta
-
             current_date = current_date + timedelta(days=1)
 
     return nightly_releases

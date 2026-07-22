@@ -31,7 +31,7 @@ All methods require:
 For local Python installation, you also need:
 
 - **Python 3.10 or later**
-- **Git** and the **GitHub CLI (`gh`)** — required only if you plan to generate release data from GitHub history.
+- A **`GITHUB_TOKEN`** environment variable — required only if you plan to generate release data from GitHub history (the `--create-initial-releases` flag). The token needs no special scopes for the public Garden Linux repository. You can obtain one from [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens) or, if you have the GitHub CLI installed, by running `export GITHUB_TOKEN=$(gh auth token)`.
 
 ## Install locally with Poetry
 
