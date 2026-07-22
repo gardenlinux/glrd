@@ -36,6 +36,20 @@ By default, `glrd-manage` writes release files (for example, `releases-minor.jso
 
 ## Generate initial release data
 
+:::info GITHUB_TOKEN required
+`--create-initial-releases` fetches release history from the GitHub API via
+[python-gardenlinux-lib](https://github.com/gardenlinux/python-gardenlinux-lib).
+Set the `GITHUB_TOKEN` environment variable before running this command. The
+token needs no special scopes for the public Garden Linux repository.
+
+```bash
+export GITHUB_TOKEN=<your-token>
+# Or, if you have the GitHub CLI installed:
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+:::
+
 Use `--create-initial-releases` to fetch the full release history from GitHub and generate all initial release files. Pass the types you want to populate as a comma-separated list:
 
 ```bash
