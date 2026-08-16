@@ -1,0 +1,231 @@
+---
+title: "Manage GLRD entries"
+description: "Step-by-step examples for creating, updating, and deleting Garden Linux releases database entries using the glrd-manage CLI tool."
+order: 3
+github_org: gardenlinux
+github_repo: glrd
+github_source_path: docs/how-to/manage-releases.md
+github_target_path: docs/how-to/releases/glrd/manage-releases.md
+related_topics:
+  - /how-to/releases/glrd/
+  - /how-to/releases/glrd/run-glrd.md
+  - /how-to/releases/glrd/query-releases.md
+  - /how-to/releases/glrd/manage-releases.md
+  - /reference/supporting_tools/glrd/
+  - /reference/supporting_tools/glrd/cli.md
+  - /reference/supporting_tools/glrd/schema.md
+  - /explanation/glrd-release-lifecycle.md
+---
+
+# Manage Garden Linux Releases
+
+This guide shows how to use `glrd-manage` to create, update, and delete releases in the Garden Linux Release Database (GLRD).
+
+## Prerequisites
+
+- `glrd-manage` installed. See [Run GLRD](/how-to/glrd-run.md).
+- AWS credentials with write access to the S3 bucket when you intend to push changes with `--s3-update`. See [AWS authentication](/how-to/glrd-run.md#aws-authentication-for-glrd-manage).
+
+:::warning Safe testing
+All examples on this page omit `--s3-update`. Without that flag, `glrd-manage` writes output files to the current directory and makes no changes to S3. Add `--s3-update` only when you are ready to publish.
+:::
+
+## Test locally
+
+By default, `glrd-manage` writes release files (for example, `releases-minor.json`) to the current working directory and does not touch S3. You can inspect the generated files to verify the output before running with `--s3-update`.
+
+## Generate initial release data
+
+:::info GITHUB_TOKEN required
+`--create-initial-releases` fetches release history from the GitHub API via
+[python-gardenlinux-lib](https://github.com/gardenlinux/python-gardenlinux-lib).
+Set the `GITHUB_TOKEN` environment variable before running this command. The
+token needs no special scopes for the public Garden Linux repository.
+
+```bash
+export GITHUB_TOKEN=<your-token>
+# Or, if you have the GitHub CLI installed:
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+:::
+
+Use `--create-initial-releases` to fetch the full release history from GitHub and generate all initial release files. Pass the types you want to populate as a comma-separated list:
+
+```bash
+glrd-manage --create-initial-releases major,minor,nightly --input
+```
+
+This generates `releases-major.json`, `releases-minor.json`, `releases-nightly.json`, and processes any manual lifecycle entries from `releases-input.yaml`.
+
+## Create a major release
+
+When you create a major release, GLRD automatically calculates default `extended` and `eol` dates (released + 6 months and + 9 months respectively). See [Default major dates](/explanation/glrd-release-lifecycle.md#default-major-dates) for details.
+
+```bash
+# Use default dates
+glrd-manage --create major --version 1312
+
+# Override dates explicitly
+glrd-manage --create major --version 1312 \
+  --lifecycle-released-isodatetime 2023-11-16T00:00:00 \
+  --lifecycle-extended-isodatetime 2024-05-03T00:00:00 \
+  --lifecycle-eol-isodatetime 2024-08-03T00:00:00
+```
+
+## Create a minor release
+
+When you create a new minor release, `glrd-manage` automatically sets the `eol` of the previous minor release to the new release's `released` date. See [Major and minor release dependencies](/explanation/glrd-release-lifecycle.md#major-and-minor-release-dependencies) for details.
+
+```bash
+glrd-manage --create minor --version 1312.7
+```
+
+## Create a nightly release
+
+Without additional parameters, `glrd-manage` uses the current timestamp and the current git commit to create a nightly release. The next available minor version number is chosen automatically:
+
+```bash
+glrd-manage --create nightly
+```
+
+## Update an existing release
+
+Use `--update` to modify lifecycle dates or the commit hash of an existing release. Specify the release by name and provide at least one modifier flag.
+
+Supported modifiers:
+
+- `--lifecycle-released-isodatetime`: Update the release date (all types).
+- `--lifecycle-extended-isodatetime`: Update the extended maintenance date (`major` and `next` only).
+- `--lifecycle-eol-isodatetime`: Update the end-of-life date (`next`, `major`, and `minor` only).
+- `--commit`: Update the git commit hash (`minor`, `nightly`, and `dev` only).
+
+```bash
+# Update the EOL date on a major release
+glrd-manage --update major-1592 \
+  --lifecycle-eol-isodatetime 2026-02-27T00:00:00 \
+  --input-stdin < releases.json
+
+# Update the extended maintenance date on a major release
+glrd-manage --update major-1592 \
+  --lifecycle-extended-isodatetime 2025-06-15T00:00:00 \
+  --input-stdin < releases.json
+
+# Update the commit hash on a minor release
+glrd-manage --update minor-1592.6 \
+  --commit deadbeef1234567890abcdef1234567890abcdef \
+  --input-stdin < releases.json
+
+# Update multiple fields at once
+glrd-manage --update major-1592 \
+  --lifecycle-eol-isodatetime 2026-02-27T00:00:00 \
+  --lifecycle-extended-isodatetime 2025-06-15T00:00:00 \
+  --input-stdin < releases.json
+```
+
+:::info
+The `--update` action requires existing release data to be provided via `--input-stdin` (as in the examples above) or loaded from the default query source. It cannot be combined with `--no-query`.
+:::
+
+## Create or update a release from JSON (stdin)
+
+You can provide release data directly from standard input in JSON format. This is useful for scripted workflows or when the release data is generated by another tool:
+
+```bash
+echo '{
+  "releases": [
+    {
+      "name": "minor-1592.1",
+      "type": "minor",
+      "version": {
+        "major": 1592,
+        "minor": 1
+      },
+      "lifecycle": {
+        "released": {
+          "isodate": "2024-08-22",
+          "timestamp": 1724277600
+        },
+        "eol": {
+          "isodate": "2025-08-12",
+          "timestamp": 1754949600
+        }
+      },
+      "git": {
+        "commit": "ec945aa995d0f08d64303ff6045b313b40b665fb",
+        "commit_short": "ec945aa"
+      },
+      "github": {
+        "release": "https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1"
+      },
+      "flavors": [
+        "ali-gardener_prod",
+        "azure-gardener_prod",
+        "aws-gardener_prod",
+        "gcp-gardener_prod"
+      ],
+      "attributes": {
+        "source_repo": false
+      }
+    }
+  ]
+}' | glrd-manage --input-stdin
+```
+
+## Create or update a release from a YAML file
+
+Write the release data to a YAML input file and pass it with `--input` and `--input-file`:
+
+```yaml
+# releases-input.yaml
+releases:
+  - name: minor-1592.1
+    type: minor
+    version:
+      major: 1592
+      minor: 1
+    lifecycle:
+      released:
+        isodate: "2024-08-22"
+        timestamp: 1724277600
+      eol:
+        isodate: "2025-08-27"
+        timestamp: 1754949600
+    git:
+      commit: ec945aa995d0f08d64303ff6045b313b40b66fff
+      commit_short: ec945aa
+    github:
+      release: https://github.com/gardenlinux/gardenlinux/releases/tag/1592.1
+    flavors:
+      - ali-gardener_prod
+      - azure-gardener_prod
+      - aws-gardener_prod
+      - gcp-gardener_prod
+    attributes:
+      source_repo: false
+```
+
+```bash
+glrd-manage --input --input-file releases-input.yaml
+```
+
+## Run fully offline
+
+To run `glrd-manage` without any network access, combine `--input-type file` with `--no-flavors`:
+
+```bash
+glrd-manage --create nightly \
+  --input-type file \
+  --no-flavors \
+  --no-query
+```
+
+- `--input-type file` reads existing releases from local files instead of the S3 endpoint.
+- `--no-flavors` skips the Git clone and S3 lookup for flavor resolution.
+- `--no-query` skips the initial query for existing releases entirely. Use with care — without the existing data, `glrd-manage` may overwrite releases.
+
+You can also set `GLRD_SKIP_FLAVORS=1` in the environment as an alternative to `--no-flavors`.
+
+## Related topics
+
+<RelatedTopics />

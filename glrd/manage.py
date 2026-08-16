@@ -1,132 +1,57 @@
 import argparse
-import fnmatch
 import json
 import logging
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import boto3
 import pytz
 import yaml
-from botocore.exceptions import ClientError
 from dateutil.relativedelta import relativedelta
-from deepdiff import DeepDiff
-from jsonschema import validate, ValidationError
+from deepdiff.diff import DeepDiff
 
-from glrd.schema_v1 import SCHEMA_V1
-from glrd.schema_v2 import SCHEMA_V2
-
+from glrd.git import (
+    get_github_releases,
+    get_git_commit_at_time,
+    get_garden_version_for_date,
+    create_initial_releases,
+    create_initial_nightly_releases,
+)
 from glrd.query import load_all_releases
+from glrd.release import (
+    GitInfo,
+    Lifecycle,
+    LifecyclePhase,
+    Release,
+    ReleaseType,
+    Version,
+    parse_release_name as model_parse_release_name,
+)
+from glrd.s3 import (
+    create_s3_bucket,
+    download_all_s3_files,
+    merge_existing_s3_data,
+    save_output_file,
+    upload_all_local_files,
+    upload_to_s3,
+)
+from glrd.validation import validate_input_version_format, validate_all_releases
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,
-    extract_version_data,
-    isodate_to_timestamp,
-    timestamp_to_isodate,
     get_version,
-    NoAliasDumper,
+    merge_input_data,
+    resolve_flavors,
+    split_releases_by_type,
 )
-from python_gardenlinux_lib.flavors.parse_flavors import (
-    parse_flavors_commit,
-)
-from python_gardenlinux_lib.s3.s3 import get_s3_artifacts, get_s3_client
 
 # silence boto3 logging
 boto3.set_stream_logger(name="botocore.credentials", level=logging.ERROR)
 
 
-def validate_input_version_format(version, release_type):
-    """
-    Validate that the input version format matches schema requirements.
-
-    Args:
-        version: Version from user input
-
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-
-    version_parts = version.split(".")
-
-    if release_type in ["major", "next"]:
-        # major and next don't use major.minor.patch
-        return True, None
-
-    if len(version_parts) == 2:
-        major = int(version_parts[0])
-        # Check if this version requires v2 schema (with patch field)
-        if major >= 2017:
-            return (
-                False,
-                f"Version {'.'.join(version_parts)} requires v2 schema "
-                f"but missing patch version. Use format: major.minor.patch",
-            )
-        return True, None
-    elif len(version_parts) == 3:
-        major = int(version_parts[0])
-        # Check if this version should use v1 schema (without patch field)
-        if major < 2017:
-            return (
-                False,
-                f"Version {'.'.join(version_parts)} uses v1 schema but "
-                f"includes patch version. Use format: major.minor",
-            )
-        return True, None
-    else:
-        return (
-            False,
-            "Invalid version format. Expected major.minor or " "major.minor.patch",
-        )
-
-
-def get_schema_for_release(release):
-    """
-    Get the appropriate schema version for a release based on its version number.
-
-    Args:
-        release: Release dictionary containing type and version information
-
-    Returns:
-        Schema dictionary appropriate for the release version
-    """
-    release_type = release.get("type")
-    version = release.get("version", {})
-
-    # For major and next releases, always use v2 schema
-    # (they don't have major.minor.patch version numbers >= 2017)
-    if release_type in ["major", "next"]:
-        return SCHEMA_V2[release_type]
-
-    # For minor, nightly, and dev releases, determine schema version based
-    # on version number
-    if release_type in ["minor", "nightly", "dev"]:
-        major = version.get("major", 0)
-        # minor = version.get("minor", 0)  # unused
-        # patch = version.get("patch", 0)  # unused
-
-        # Use v2 schema (with patch field) for versions >= 2017.0.0
-        if major >= 2017:
-            return SCHEMA_V2[release_type]
-        else:
-            return SCHEMA_V1[release_type]
-
-    return None
-
-
 # Global variable to store the path of the cloned gardenlinux repository (cached)
 repo_clone_path = None
-
-
-def cleanup_temp_repo():
-    """Cleanup function to delete the temporary directory at the end of the
-    script."""
-    # global repo_clone_path  # unused
-    if repo_clone_path and os.path.exists(repo_clone_path):
-        shutil.rmtree(repo_clone_path)
 
 
 def glrd_query_type(args, release_type):
@@ -134,10 +59,11 @@ def glrd_query_type(args, release_type):
     try:
         releases = load_all_releases(
             release_type,
-            DEFAULTS["QUERY_INPUT_TYPE"],
-            DEFAULTS["QUERY_INPUT_URL"],
-            DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
-            DEFAULTS["QUERY_INPUT_FORMAT"],
+            getattr(args, "input_type", None) or DEFAULTS["QUERY_INPUT_TYPE"],
+            getattr(args, "input_url", None) or DEFAULTS["QUERY_INPUT_URL"],
+            getattr(args, "input_file_prefix", None)
+            or DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
+            getattr(args, "query_input_format", None) or DEFAULTS["QUERY_INPUT_FORMAT"],
         )
         if not releases:
             logging.warning(
@@ -154,356 +80,30 @@ def glrd_query_type(args, release_type):
         return []
 
 
-def get_github_releases():
-    """Fetch releases from the GitHub API using the 'gh' command."""
-    command = [
-        "gh",
-        "api",
-        "--paginate",
-        f"/repos/{DEFAULTS['GL_REPO_OWNER']}/" f"{DEFAULTS['GL_REPO_NAME']}/releases",
-    ]
-    result = subprocess.run(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    if result.returncode != 0:
-        logging.error(f"Error fetching GitHub releases: {result.stderr}")
-        sys.exit(ERROR_CODES["subprocess_output_error"])
-    return json.loads(result.stdout)
-
-
-def get_git_commit_from_tag(tag):
-    """
-    Fetch the git commit hash for a given tag using the GitHub API.
-    """
-    try:
-        # Use the GitHub API to get the commit hash from the tag name
-        command = [
-            "gh",
-            "api",
-            f"/repos/{DEFAULTS['GL_REPO_OWNER']}/"
-            f"{DEFAULTS['GL_REPO_NAME']}/git/refs/tags/{tag}",
-            "--jq",
-            ".object.sha",
-        ]
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-
-        if result.returncode != 0:
-            logging.error(f"Error fetching git commit for tag: {tag}, {result.stderr}")
-            sys.exit(ERROR_CODES["subprocess_output_missing"])
-
-        commit = result.stdout.strip()
-        return (
-            commit,
-            commit[:8],
-        )  # Return full commit and shortened version
-    except Exception as e:
-        logging.error(f"Error fetching git commit for tag {tag}: {e}")
-        sys.exit(ERROR_CODES["subprocess_output_error"])
-
-
 def ensure_isodate_and_timestamp(lifecycle):
     """
     Ensure both isodate and timestamp are set for all lifecycle fields
     (released, extended, eol). If only one is present, the other is
     computed.
+
+    This operates on the raw lifecycle dict (the JSON boundary) but delegates
+    the isodate<->timestamp conversion to the release model's
+    ``LifecyclePhase.ensure_complete`` so there is a single source of truth for
+    that logic.
     """
     for key in ["released", "extended", "eol"]:
-        if key in lifecycle and lifecycle[key]:
-            entry = lifecycle[key]
-            # Ensure if 'isodate' exists, 'timestamp' is computed
-            if "isodate" in entry and entry["isodate"] and not entry.get("timestamp"):
-                entry["timestamp"] = isodate_to_timestamp(entry["isodate"])
-            # Ensure if 'timestamp' exists, 'isodate' is computed
-            elif (
-                "timestamp" in entry and entry["timestamp"] and not entry.get("isodate")
-            ):
-                entry["isodate"] = timestamp_to_isodate(entry["timestamp"])
-
-
-def get_git_commit_at_time(
-    date, time="06:00", branch="main", remote_repo=DEFAULTS["GL_REPO_URL"]
-):
-    """Fetch the git commit that was at a specific date and time in the
-    main branch, using a temporary cached git clone."""
-    global repo_clone_path
-
-    # Convert the input date and time to the target timezone (UTC) and
-    # then to UTC
-    target_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").astimezone(
-        pytz.timezone("UTC")
-    )
-    target_time_utc = target_time.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    # If the repository hasn't been cloned yet, clone it to a dynamically
-    # created temp directory
-    if not repo_clone_path:
-        # Create a temporary directory for cloning the repository
-        temp_dir = tempfile.mkdtemp(prefix="glrd_temp_repo_")
-
-        # Perform the shallow clone
-        clone_command = [
-            "git",
-            "clone",
-            "--depth",
-            "1",
-            "--branch",
-            branch,
-            remote_repo,
-            temp_dir,
-        ]
-        clone_result = subprocess.run(
-            clone_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        if clone_result.returncode != 0:
-            logging.error(f"Error cloning remote repository: {clone_result.stderr}")
-            sys.exit(ERROR_CODES["subprocess_output_error"])
-
-        # Fetch full history to enable searching through commits by time
-        fetch_command = ["git", "fetch", "--unshallow"]
-        fetch_result = subprocess.run(
-            fetch_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=temp_dir,
-        )
-
-        if fetch_result.returncode != 0:
-            logging.error(
-                f"Error fetching full history from remote repository: {fetch_result.stderr}"
-            )
-            sys.exit(ERROR_CODES["subprocess_output_error"])
-
-        # Cache the clone path to reuse it later
-        repo_clone_path = temp_dir
-
-    # Use `git rev-list` to find the commit before the specified time
-    rev_list_command = [
-        "git",
-        "rev-list",
-        "-n",
-        "1",
-        "--before",
-        target_time_utc,
-        branch,
-    ]
-    rev_list_result = subprocess.run(
-        rev_list_command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=repo_clone_path,
-    )
-
-    if rev_list_result.returncode != 0:
-        logging.error(
-            f"Error fetching git commit for {date} at {time}: {rev_list_result.stderr}"
-        )
-        sys.exit(ERROR_CODES["subprocess_output_error"])
-
-    commit = rev_list_result.stdout.strip()
-
-    # Example of a debug message
-    logging.debug(f"Found commit {commit} for {date} at {time}")
-
-    if not commit:
-        logging.error(f"No commit found for {date} at {time}")
-        sys.exit(ERROR_CODES["subprocess_output_missing"])
-
-    return commit, commit[:8]
-
-
-def get_garden_version_for_date(release_type, date, existing_releases):
-    """
-    Create major.minor.patch version based on the Garden Linux base_date.
-    Logic is taken from `gardenlinux/bin/garden-version`.
-
-    Major: days since base date.
-    Minor: Next available minor version based on existing releases.
-    Patch: Next available patch version based on existing releases.
-    """
-    # Calculate major version
-    base_date = datetime(2020, 3, 31, tzinfo=pytz.UTC)
-    major = (date - base_date).days
-
-    if release_type == "next":
-        minor = 0
-        patch = 0
-    elif release_type == "major":
-        minor = 0
-        patch = 0
-    else:
-        # Collect existing minor versions for the given major version and
-        # release type
-        existing_minor_versions = [
-            release["version"].get("minor", -1)
-            for release in existing_releases
-            if (
-                release["type"] == release_type and release["version"]["major"] == major
-            )
-        ]
-        existing_patch_versions = [
-            release["version"].get("patch", -1)
-            for release in existing_releases
-            if (
-                release["type"] == release_type
-                and release["version"]["major"] == major
-                and release["version"]["minor"] == minor
-            )
-        ]
-
-        logging.debug(
-            f"Existing patch versions for major {major} and minor "
-            f"{minor}: {existing_patch_versions}"
-        )
-
-        if existing_minor_versions:
-            minor = max(existing_minor_versions) + 1
-        else:
-            minor = 0
-
-        if existing_patch_versions:
-            patch = max(existing_patch_versions) + 1
-        else:
-            patch = 0
-
-    logging.debug(
-        f"New {release_type} version for {date} is " f"{major}.{minor}.{patch}"
-    )
-
-    return major, minor, patch
-
-
-def create_initial_releases(releases):
-    """Generate initial major and minor releases."""
-    release_data_major = []
-    release_data_minor = []
-    latest_minor_versions = {}
-    latest_patch_versions = {}
-
-    releases.sort(key=lambda r: extract_version_data(r["tag_name"]))
-
-    for release in releases:
-        tag_name = release.get("tag_name")
-        major, minor, patch = extract_version_data(tag_name)
-        if major is None:
+        entry = lifecycle.get(key)
+        if not entry:
             continue
-
-        # Determine release type: "minor" if minor exists, otherwise "major"
-        release_type = "minor" if minor is not None and patch is not None else "major"
-
-        release_info = {
-            "name": f"{release_type}-{tag_name}",
-            "type": release_type,
-            "version": {"major": major},
-            "lifecycle": {
-                "released": {
-                    "isodate": release["published_at"][:10],
-                    "timestamp": isodate_to_timestamp(release["published_at"]),
-                },
-                "eol": {"isodate": None, "timestamp": None},
-            },
-        }
-        if release_type == "major":
-            release_data_major.append(release_info)
-            logging.debug(f"Initial major release '{release_info['name']}' created.")
-        else:
-            # For minor releases, add git and github data
-            if release_type == "minor":
-                commit, commit_short = get_git_commit_from_tag(tag_name)
-                release_info["version"]["minor"] = minor
-                release_info["version"]["patch"] = patch
-                release_info["git"] = {
-                    "commit": commit,
-                    "commit_short": commit_short,
-                }
-                release_info["github"] = {"release": release["html_url"]}
-                release_data_minor.append(release_info)
-                logging.debug(
-                    f"Initial minor release '{release_info['name']}' created."
-                )
-
-        if major not in latest_minor_versions or (
-            (minor is not None and minor > latest_minor_versions[major]["minor"])
-            and (patch is not None and patch > latest_minor_versions[major]["patch"])
-        ):
-            latest_minor_versions[major] = {
-                "index": len(
-                    release_data_minor
-                    if release_type == "minor"
-                    else release_data_major
-                )
-                - 1,
-                "minor": minor,
-                "patch": patch,
-            }
-
-    return (
-        release_data_major,
-        release_data_minor,
-        latest_minor_versions,
-        latest_patch_versions,
-    )
-
-
-def create_initial_nightly_releases(major_releases):
-    """Generate initial nightly releases from the earliest major release."""
-    release_data = []
-    release_type = "nightly"
-
-    # Set the default start date to 2020-06-09 06:00 UTC
-    start_date_default = datetime(2020, 6, 9, 6, 0, 0, tzinfo=pytz.UTC)
-
-    if major_releases:
-        # Get the earliest major release timestamp
-        first_major_release = min(
-            major_releases,
-            key=lambda r: r["lifecycle"]["released"]["timestamp"],
+        phase = LifecyclePhase(
+            isodate=entry.get("isodate"),
+            timestamp=entry.get("timestamp"),
         )
-        # Convert the timestamp to a datetime object and set the time to 06:00 UTC
-        start_date = datetime.utcfromtimestamp(
-            first_major_release["lifecycle"]["released"]["timestamp"]
-        ).replace(hour=7, minute=0, second=0, tzinfo=pytz.UTC)
-    else:
-        logging.info(
-            "No major releases found in the generated data. Using default start date."
-        )
-        # Use the default start date if no major releases are available
-        start_date = start_date_default
-
-    # Ensure current_date is set to 06:00 UTC as well
-    tz = pytz.timezone("UTC")
-    current_date = datetime.now(tz).replace(hour=6, minute=0, second=0, patchsecond=0)
-
-    date = start_date
-
-    while date <= current_date:
-        major, minor, patch = get_garden_version_for_date(release_type, date, [])
-        commit, commit_short = get_git_commit_at_time(date.strftime("%Y-%m-%d"))
-        nightly_name = f"nightly-{major}.{minor}.{patch}"
-        release_info = {
-            "name": nightly_name,
-            "type": "nightly",
-            "version": {"major": major, "minor": minor, "patch": patch},
-            "lifecycle": {
-                "released": {
-                    "isodate": date.strftime("%Y-%m-%d"),
-                    "timestamp": int(date.timestamp()),
-                }
-            },
-            "git": {"commit": commit, "commit_short": commit_short},
-        }
-        release_data.append(release_info)
-        logging.debug(f"Initial nightly release '{release_info['name']}' created.")
-        date += timedelta(days=1)
-
-    return release_data
+        phase.ensure_complete()
+        if entry.get("isodate") and not entry.get("timestamp"):
+            entry["timestamp"] = phase.timestamp
+        elif entry.get("timestamp") and not entry.get("isodate"):
+            entry["isodate"] = phase.isodate
 
 
 def create_single_release(release_type, args, existing_releases):
@@ -580,15 +180,20 @@ def create_single_release(release_type, args, existing_releases):
             lifecycle_eol_isodate = None
             lifecycle_eol_timestamp = None
 
-    # Check if a manual commit is provided, otherwise use git commit at the given time
-    if args.commit:
-        commit = args.commit
-        if len(commit) != 40:
-            logging.error("Error: Invalid commit hash. Must be 40 characters.")
-            sys.exit(ERROR_CODES["validation_error"])
-        commit_short = commit[:8]
-    else:
-        commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
+    # Resolve the git commit only for release types that store it
+    # (minor, nightly, dev). 'next' and 'major' releases do not carry a commit,
+    # so we avoid the network lookup (git clone) entirely for them.
+    commit = None
+    commit_short = None
+    if release_type in ("minor", "nightly", "dev"):
+        if args.commit:
+            commit = args.commit
+            if len(commit) != 40:
+                logging.error("Error: Invalid commit hash. Must be 40 characters.")
+                sys.exit(ERROR_CODES["validation_error"])
+            commit_short = commit[:8]
+        else:
+            commit, commit_short = get_git_commit_at_time(lifecycle_released_isodate)
 
     # Check if a manual version is provided, otherwise use garden version for the date
     if args.create == "next":
@@ -643,111 +248,76 @@ def create_single_release(release_type, args, existing_releases):
     # Create version object
     version = {"major": major, "minor": minor, "patch": patch}
 
-    # First try to get flavors from flavors.yaml
-    flavors = parse_flavors_commit(
-        commit, version=version, query_s3=False, logger=logging.getLogger()
+    # Flavors only apply to release types that carry a git commit.
+    flavors = []
+    if release_type in ("minor", "nightly", "dev"):
+        flavors = resolve_flavors(
+            commit, version, skip=getattr(args, "no_flavors", False)
+        )
+        if not flavors:
+            logging.info(
+                f"No flavors found anywhere for version {version} "
+                f"(commit {commit_short})"
+            )
+
+    # Build the release using the domain model (single source of truth for
+    # name generation, version shape, and serialization).
+    rtype = ReleaseType(release_type)
+    version_obj = Version(major, minor, patch)
+
+    released_phase = LifecyclePhase(
+        isodate=lifecycle_released_isodate,
+        timestamp=lifecycle_released_timestamp,
     )
 
-    # Only if no flavors found in flavors.yaml, try S3
-    if not flavors:
-        logging.info("No flavors found in flavors.yaml, checking S3 artifacts...")
-        # Get artifacts data from S3 with caching
-        artifacts_data = get_s3_artifacts(
-            DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
-            DEFAULTS["ARTIFACTS_S3_PREFIX"],
-            logger=logging.getLogger(),
+    if rtype in (ReleaseType.NEXT, ReleaseType.MAJOR):
+        lifecycle = Lifecycle(
+            released=released_phase,
+            extended=LifecyclePhase(
+                isodate=lifecycle_extended_isodate,
+                timestamp=lifecycle_extended_timestamp,
+            ),
+            eol=LifecyclePhase(
+                isodate=lifecycle_eol_isodate,
+                timestamp=lifecycle_eol_timestamp,
+            ),
+        )
+        release_obj = Release(
+            name=Release.default_name(rtype, version_obj),
+            type=rtype,
+            version=version_obj,
+            lifecycle=lifecycle,
+        )
+    elif rtype == ReleaseType.MINOR:
+        lifecycle = Lifecycle(
+            released=released_phase,
+            eol=LifecyclePhase(
+                isodate=lifecycle_eol_isodate,
+                timestamp=lifecycle_eol_timestamp,
+            ),
+        )
+        release_obj = Release(
+            name=Release.default_name(rtype, version_obj),
+            type=rtype,
+            version=version_obj,
+            lifecycle=lifecycle,
+            git=GitInfo(commit=commit, commit_short=commit_short),
+            github={"release": Release.github_release_url(version_obj, rtype)},
+            flavors=flavors,
+            attributes={"source_repo": True},
+        )
+    else:  # dev, nightly
+        release_obj = Release(
+            name=Release.default_name(rtype, version_obj),
+            type=rtype,
+            version=version_obj,
+            lifecycle=Lifecycle(released=released_phase),
+            git=GitInfo(commit=commit, commit_short=commit_short),
+            flavors=flavors,
+            attributes={"source_repo": True},
         )
 
-        if artifacts_data:
-            flavors = parse_flavors_commit(
-                commit,
-                version=version,
-                query_s3=True,
-                s3_objects=artifacts_data,
-                logger=logging.getLogger(),
-            )
-        else:
-            logging.warning("No artifacts data available from S3")
-
-    if not flavors:
-        logging.info(
-            f"No flavors found anywhere for version {version} (commit {commit_short})"
-        )
-
-    # Create release data
-    release = {}
-    release["type"] = f"{release_type}"
-    release["version"] = {}
-    release["version"]["major"] = major
-    release["lifecycle"] = {}
-    release["lifecycle"]["released"] = {}
-    release["lifecycle"]["released"]["isodate"] = lifecycle_released_isodate
-    release["lifecycle"]["released"]["timestamp"] = lifecycle_released_timestamp
-
-    if release_type in ["dev", "nightly"]:
-        # Create name and version based on schema version
-        if major >= 2017:
-            # v2 schema: include patch version
-            release["name"] = f"{release_type}-{major}.{minor}.{patch}"
-            release["version"]["minor"] = minor
-            release["version"]["patch"] = patch
-        else:
-            # v1 schema: exclude patch version
-            release["name"] = f"{release_type}-{major}.{minor}"
-            release["version"]["minor"] = minor
-            # Don't set patch for v1 schema releases
-
-        release["git"] = {}
-        release["git"]["commit"] = commit
-        release["git"]["commit_short"] = commit_short
-        release["flavors"] = flavors
-        release["attributes"] = {}
-        release["attributes"]["source_repo"] = True
-    elif release_type == "next":
-        release["name"] = f"{release_type}"
-        release["lifecycle"]["extended"] = {}
-        release["lifecycle"]["extended"]["isodate"] = lifecycle_extended_isodate
-        release["lifecycle"]["extended"]["timestamp"] = lifecycle_extended_timestamp
-        release["lifecycle"]["eol"] = {}
-        release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
-        release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-    elif release_type == "major":
-        release["name"] = f"{release_type}-{major}"
-        release["lifecycle"]["extended"] = {}
-        release["lifecycle"]["extended"]["isodate"] = lifecycle_extended_isodate
-        release["lifecycle"]["extended"]["timestamp"] = lifecycle_extended_timestamp
-        release["lifecycle"]["eol"] = {}
-        release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
-        release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-    elif release_type == "minor":
-        # Create name and version based on schema version
-        if major >= 2017:
-            # v2 schema: include patch version
-            release["name"] = f"{release_type}-{major}.{minor}.{patch}"
-            release["version"]["minor"] = minor
-            release["version"]["patch"] = patch
-            github_version = f"{major}.{minor}.{patch}"
-        else:
-            # v1 schema: exclude patch version
-            release["name"] = f"{release_type}-{major}.{minor}"
-            release["version"]["minor"] = minor
-            # Don't set patch for v1 schema releases
-            github_version = f"{major}.{minor}"
-
-        release["lifecycle"]["eol"] = {}
-        release["lifecycle"]["eol"]["isodate"] = lifecycle_eol_isodate
-        release["lifecycle"]["eol"]["timestamp"] = lifecycle_eol_timestamp
-        release["git"] = {}
-        release["git"]["commit"] = commit
-        release["git"]["commit_short"] = commit_short
-        release["github"] = {}
-        release["github"][
-            "release"
-        ] = f"https://github.com/gardenlinux/gardenlinux/releases/tag/{github_version}"
-        release["flavors"] = flavors
-        release["attributes"] = {}
-        release["attributes"]["source_repo"] = True
-
+    release = release_obj.to_dict()
     logging.debug(f"Release '{release['name']}' created.")
     return release
 
@@ -933,19 +503,6 @@ def update_release(
     logging.debug(f"Release '{args.update}' will be updated.")
 
 
-def merge_input_data(existing_releases, new_releases):
-    """Merge two lists of releases, updating existing releases with new releases."""
-    # Create a dictionary of releases by name from existing_releases
-    releases_by_name = {release["name"]: release for release in existing_releases}
-
-    # Update or add releases from new_data
-    for new_release in new_releases:
-        releases_by_name[new_release["name"]] = new_release
-
-    # Return the merged list of releases
-    return list(releases_by_name.values())
-
-
 def set_latest_minor_eol_to_major(major_releases, minor_releases):
     """Set the EOL of each minor version to the next higher minor version,
     and the EOL of the latest minor version to match the major release."""
@@ -989,22 +546,17 @@ def load_input(filename):
     """Load manual input from a file if it exists."""
     try:
         input_data = yaml.safe_load(open(filename, "r"))
-
         merged_releases = input_data.get("releases", [])
         if len(merged_releases) == 0:
             logging.error("Error, no releases found in JSON from file")
             sys.exit(ERROR_CODES["input_parameter_missing"])
-        next_releases = [r for r in merged_releases if r["type"] == "next"]
-        major_releases = [r for r in merged_releases if r["type"] == "major"]
-        minor_releases = [r for r in merged_releases if r["type"] == "minor"]
-        nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
-        dev_releases = [r for r in merged_releases if r["type"] == "dev"]
+        by_type = split_releases_by_type(merged_releases)
         return (
-            next_releases,
-            major_releases,
-            minor_releases,
-            nightly_releases,
-            dev_releases,
+            by_type["next"],
+            by_type["major"],
+            by_type["minor"],
+            by_type["nightly"],
+            by_type["dev"],
         )
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing JSON from file: {str(e)}")
@@ -1019,32 +571,24 @@ def load_input_stdin():
     try:
         stdin_data = sys.stdin.read()
         input_data = json.loads(stdin_data)
-
         logging.debug(f"Input data from stdin: {input_data}")
-
         merged_releases = input_data.get("releases", [])
         if len(merged_releases) == 0:
             logging.error("Error, no releases found in JSON from stdin")
             sys.exit(ERROR_CODES["input_parameter_missing"])
-        next_releases = [r for r in merged_releases if r["type"] == "next"]
-        major_releases = [r for r in merged_releases if r["type"] == "major"]
-        minor_releases = [r for r in merged_releases if r["type"] == "minor"]
-        nightly_releases = [r for r in merged_releases if r["type"] == "nightly"]
-        dev_releases = [r for r in merged_releases if r["type"] == "dev"]
-
+        by_type = split_releases_by_type(merged_releases)
         logging.debug(
             f"Parsed releases from stdin - "
-            f"next: {len(next_releases)}, major: {len(major_releases)}, "
-            f"minor: {len(minor_releases)}, nightly: {len(nightly_releases)}, "
-            f"dev: {len(dev_releases)}"
+            f"next: {len(by_type['next'])}, major: {len(by_type['major'])}, "
+            f"minor: {len(by_type['minor'])}, nightly: {len(by_type['nightly'])}, "
+            f"dev: {len(by_type['dev'])}"
         )
-
         return (
-            next_releases,
-            major_releases,
-            minor_releases,
-            nightly_releases,
-            dev_releases,
+            by_type["next"],
+            by_type["major"],
+            by_type["minor"],
+            by_type["nightly"],
+            by_type["dev"],
         )
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing JSON from stdin: {str(e)}")
@@ -1055,78 +599,18 @@ def load_input_stdin():
 
 
 def parse_release_name(release_name):
-    """Parse the release name in the format 'type-major.minor.patch' or
-    'type-major.minor' or 'type-major'."""
-    valid_types = ["next", "major", "minor", "nightly", "dev"]
-    type_and_version = release_name.split("-", 1)
-    if len(type_and_version) != 2:
-        logging.error(
-            "Error: Invalid release name format. Expected "
-            "'type-major.minor.patch' or 'type-major.minor' or 'type-major'"
-        )
-        sys.exit(ERROR_CODES["validation_error"])
-    release_type = type_and_version[0]
-    if release_type not in valid_types:
-        logging.error(
-            f"Error: Invalid release type '{release_type}'. "
-            f"Must be one of {', '.join(valid_types)}."
-        )
-        sys.exit(ERROR_CODES["validation_error"])
-    version = type_and_version[1]
-    version_parts = version.split(".")
+    """Parse a release name into (type, major, minor, patch).
+
+    Thin wrapper around :func:`glrd.release.parse_release_name` that converts
+    the model's ``ValueError`` into the CLI's error-exit behavior. The release
+    model is the single source of truth for name parsing.
+    """
     try:
-        if len(version_parts) == 3:
-            major = int(version_parts[0])
-            minor = int(version_parts[1])
-            patch = int(version_parts[2])
-        elif len(version_parts) == 2:
-            major = int(version_parts[0])
-            minor = int(version_parts[1])
-            patch = None
-        elif len(version_parts) == 1:
-            major = int(version_parts[0])
-            minor = None
-            patch = None
-        else:
-            logging.error("Error: Invalid version format in release name.")
-            sys.exit(ERROR_CODES["validation_error"])
-    except ValueError:
-        logging.error("Error: Major, minor and patch versions must be integers.")
+        release_type, major, minor, patch = model_parse_release_name(release_name)
+    except ValueError as exc:
+        logging.error(f"Error: {exc}")
         sys.exit(ERROR_CODES["validation_error"])
-    return release_type, major, minor, patch
-
-
-def validate_release_data(release, errors):
-    """Validate release data using the appropriate JSON schema."""
-    schema = get_schema_for_release(release)
-    if not schema:
-        error_message = f"Unknown release type: {release['type']}"
-        logging.error(error_message)
-        errors.append(error_message)
-        return False
-    try:
-        validate(instance=release, schema=schema)
-        return True
-    except ValidationError as e:
-        # Construct the field path that caused the validation error
-        field_path = ".".join([str(p) for p in e.absolute_path])
-        error_message = (
-            f"Validation error for release '{release['name']}' "
-            f"at '{field_path}': {e.message}"
-        )
-        logging.error(error_message)
-        errors.append(error_message)
-        return False
-
-
-def validate_all_releases(releases):
-    """Validate all releases and exit if any validation errors are found."""
-    errors = []
-    for release in releases:
-        validate_release_data(release, errors)
-    if errors:
-        logging.error(f"Validation failed for {len(errors)} release(s). Exiting.")
-        sys.exit(ERROR_CODES["validation_error"])
+    return release_type.value, major, minor, patch
 
 
 def diff_releases(existing_merged_releases, merged_releases):
@@ -1179,251 +663,10 @@ def diff_releases(existing_merged_releases, merged_releases):
                 ]:
                     changes_list = sorted(list(changes))
                     for change in changes_list:
-                        # formatted_change = change.replace("root", "")  # unused
-                        pass
-
-
-def save_output_file(data, filename, format="yaml"):
-    """Save the data to a file in the specified format."""
-    with open(filename, "w") as file:
-        if format == "yaml":
-            yaml.dump(
-                data,
-                file,
-                default_flow_style=False,
-                sort_keys=False,
-                Dumper=NoAliasDumper,
-            )
-        else:
-            # Optimize JSON by removing unnecessary spaces
-            json.dump(data, file, separators=(",", ":"), ensure_ascii=False)
-
-
-def create_s3_bucket(args, bucket_name=None, region=None):
-    """Create an S3 bucket for storing releases data."""
-    if not bucket_name:
-        bucket_name = args.s3_bucket_name
-    if not region:
-        region = args.s3_bucket_region
-    try:
-        s3_client = boto3.client("s3", region_name=region)
-        location = {"LocationConstraint": region}
-        s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration=location)
-        logging.info(f"Bucket '{bucket_name}' created successfully.")
-        s3_client.put_bucket_tagging(
-            Bucket=bucket_name,
-            Tagging={
-                "TagSet": [
-                    {
-                        "Key": "sec-by-def-public-storage-exception",
-                        "Value": "enabled",
-                    },
-                    {
-                        "Key": "sec-by-def-objectversioning-exception",
-                        "Value": "enabled",
-                    },
-                    {
-                        "Key": "sec-by-def-encrypt-storage-exception",
-                        "Value": "enabled",
-                    },
-                ]
-            },
-        )
-        logging.info(f"Tags added to bucket '{bucket_name}'.")
-        s3_client.put_public_access_block(
-            Bucket=bucket_name,
-            PublicAccessBlockConfiguration={
-                "BlockPublicAcls": False,
-                "IgnorePublicAcls": False,
-                "BlockPublicPolicy": False,
-                "RestrictPublicBuckets": False,
-            },
-        )
-        logging.info(
-            f"Public access block settings disabled for bucket '{bucket_name}'."
-        )
-        bucket_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                # Allow public read access to all objects in the bucket
-                {
-                    "Sid": "PublicReadGetObject",
-                    "Effect": "Allow",
-                    "Principal": "*",
-                    "Action": "s3:GetObject",
-                    "Resource": f"arn:aws:s3:::{bucket_name}/*",
-                },
-                # Deny non-SSL access
-                {
-                    "Sid": "AllowSSLRequestsOnly",
-                    "Effect": "Deny",
-                    "Principal": "*",
-                    "Action": "s3:*",
-                    "Resource": [
-                        "arn:aws:s3:::gardenlinux-glrd",
-                        "arn:aws:s3:::gardenlinux-glrd/*",
-                    ],
-                    "Condition": {"Bool": {"aws:SecureTransport": "false"}},
-                },
-            ],
-        }
-        s3_client.put_bucket_policy(
-            Bucket=bucket_name, Policy=json.dumps(bucket_policy)
-        )
-        logging.info(
-            f"Bucket '{bucket_name}' made public and denied non-SSL access with a bucket policy."
-        )
-    except ClientError as e:
-        logging.error(f"Error creating bucket: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
-
-
-def upload_to_s3(file_path, bucket_name, bucket_key):
-    """Upload a file to an S3 bucket."""
-    s3_client = boto3.client("s3")
-    try:
-        s3_client.upload_file(file_path, bucket_name, bucket_key)
-        logging.debug(f"Uploaded '{file_path}' to 's3://{bucket_name}/{bucket_key}'.")
-    except ClientError as e:
-        logging.error(f"Error uploading {file_path} to S3: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
-
-
-def download_from_s3(bucket_name, bucket_key, local_file):
-    """Download a file from an S3 bucket to a local file."""
-    s3_client = boto3.client("s3")
-    try:
-        s3_client.download_file(bucket_name, bucket_key, local_file)
-        logging.debug(
-            f"Downloaded 's3://{bucket_name}/{bucket_key}' to '{local_file}'."
-        )
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "404":
-            logging.warning(
-                f"No existing file found at 's3://{bucket_name}/{bucket_key}', "
-                f"starting with a fresh file."
-            )
-            return None  # No existing file, so we return None
-        logging.error(f"Error downloading from S3: {e}")
-        sys.exit(ERROR_CODES["s3_output_error"])
-
-
-def merge_existing_s3_data(bucket_name, bucket_key, local_file, new_data):
-    """Download, merge, and return the merged data using a temporary file."""
-    # Use a temporary file that will be automatically deleted when closed
-    with tempfile.NamedTemporaryFile(delete=True, mode="w+") as temp_file:
-        # Download existing releases.json from S3 if it exists
-        download_from_s3(bucket_name, bucket_key, temp_file.name)
-
-        # Load existing data if the file was successfully downloaded
-        try:
-            temp_file.seek(0)  # Go to the start of the file to read the contents
-            with open(temp_file.name, "r") as f:
-                file_contents = f.read()  # Read file contents as a string
-                existing_data = json.loads(file_contents)  # Load JSON from string
-                # Ensure we're working with a list
-                existing_releases = (
-                    existing_data
-                    if isinstance(existing_data, list)
-                    else existing_data.get("releases", [])
-                )
-        except (json.JSONDecodeError, FileNotFoundError):
-            logging.warning(
-                "Could not decode the existing JSON from S3 or no file "
-                "exists. Starting with a fresh file."
-            )
-            existing_releases = []
-
-        # Ensure new_data is treated as a list
-        new_releases = (
-            new_data if isinstance(new_data, list) else new_data.get("releases", [])
-        )
-
-        # Use the merge function to merge new and existing releases
-        merged_releases = merge_input_data(existing_releases, new_releases)
-
-        # Return the merged data as a list
-        return merged_releases
-
-
-def download_all_s3_files(bucket_name, bucket_prefix):
-    """Download all release files from S3 bucket."""
-    s3_client = get_s3_client()
-
-    try:
-        # List all objects in the bucket with the given prefix
-        paginator = s3_client.get_paginator("list_objects_v2")
-        found_files = False
-
-        logging.info(f"Looking for files in s3://{bucket_name}/{bucket_prefix}")
-
-        for page in paginator.paginate(Bucket=bucket_name, Prefix=bucket_prefix):
-            if "Contents" in page:
-                found_files = True
-                for obj in page["Contents"]:
-                    key = obj["Key"]
-                    if key.endswith(".json"):
-                        local_file = os.path.basename(key)
-                        download_from_s3(bucket_name, key, local_file)
-
-        if not found_files:
-            logging.warning(
-                f"No release files found in s3://{bucket_name}/{bucket_prefix}"
-            )
-            # Create empty files for each release type
-            for release_type in DEFAULTS["RELEASE_TYPES"]:
-                filename = f"releases-{release_type}.json"
-                save_output_file({"releases": []}, filename, "json")
-
-    except Exception as e:
-        logging.error(f"Error downloading files from S3: {e}")
-
-
-def upload_all_local_files(bucket_name, bucket_prefix):
-    """Upload all local release files to S3."""
-    s3_client = boto3.client("s3")
-
-    try:
-        # First find all matching local files
-        matching_files = []
-        for file in os.listdir("."):
-            for release_type in DEFAULTS["RELEASE_TYPES"]:
-                filename = f"releases-{release_type}.json"
-                if fnmatch.fnmatch(file, filename):
-                    matching_files.append(file)
-
-        if not matching_files:
-            logging.warning("No release files found to upload")
-            return
-
-        # Show what will be uploaded and ask for confirmation
-        print("\nThe following files will be uploaded to S3:")
-        for file in matching_files:
-            bucket_key = f"{bucket_prefix}{file}"
-            print(f"  {file} -> s3://{bucket_name}/{bucket_key}")
-
-        response = input(
-            "\nDo you really want to upload these files to S3? [y/N] "
-        ).lower()
-        if response != "y":
-            print("Upload cancelled.")
-            return
-
-        # Proceed with upload
-        files_uploaded = 0
-        for file in matching_files:
-            bucket_key = f"{bucket_prefix}{file}"
-            try:
-                s3_client.upload_file(file, bucket_name, bucket_key)
-                files_uploaded += 1
-            except Exception as e:
-                logging.error(f"Error uploading {file}: {e}")
-
-        logging.info(f"Successfully uploaded {files_uploaded} release files")
-
-    except Exception as e:
-        logging.error(f"Error accessing S3: {e}")
-        sys.exit(ERROR_CODES["s3_error"])
+                        formatted_change = str(change).replace("root", "")
+                        logging.info(
+                            f"{release_name} - {change_type}: {formatted_change}"
+                        )
 
 
 def handle_releases(args):
@@ -1434,6 +677,10 @@ def handle_releases(args):
 
     if args.output_all:
         download_all_s3_files(args.s3_bucket_name, args.s3_bucket_prefix)
+        return
+
+    if args.s3_create_bucket:
+        create_s3_bucket(args)
         return
 
     if not args.s3_update:
@@ -1758,6 +1005,39 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "--input-type",
+        choices=["file", "url"],
+        default=DEFAULTS["QUERY_INPUT_TYPE"],
+        help="Where existing releases are queried from when not using "
+        "--no-query: 'file' (local) or 'url' (default). Use 'file' to run "
+        "fully offline.",
+    )
+
+    parser.add_argument(
+        "--input-url",
+        type=str,
+        default=DEFAULTS["QUERY_INPUT_URL"],
+        help="Base URL used to query existing releases (default: "
+        "gardenlinux-glrd S3 URL). Only used with '--input-type url'.",
+    )
+
+    parser.add_argument(
+        "--input-file-prefix",
+        type=str,
+        default=DEFAULTS["QUERY_INPUT_FILE_PREFIX"],
+        help="Prefix used to query existing releases from local files "
+        "(default: releases). Only used with '--input-type file'.",
+    )
+
+    parser.add_argument(
+        "--query-input-format",
+        choices=["yaml", "json"],
+        default=DEFAULTS["QUERY_INPUT_FORMAT"],
+        help="Format of the existing releases queried when not using "
+        "--no-query (default: json).",
+    )
+
+    parser.add_argument(
         "--output-format",
         type=str,
         choices=["yaml", "json"],
@@ -1829,6 +1109,13 @@ def parse_arguments():
         "--commit",
         type=str,
         help="Manually specify the git commit hash (40 characters).",
+    )
+    parser.add_argument(
+        "--no-flavors",
+        action="store_true",
+        help="Do not resolve flavors (skips the Git clone and S3 lookup). "
+        "Useful for offline use and tests. Can also be enabled via the "
+        "GLRD_SKIP_FLAVORS environment variable.",
     )
     parser.add_argument(
         "--lifecycle-released-isodatetime",

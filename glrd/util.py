@@ -1,27 +1,101 @@
+import importlib.metadata
 import logging
 import os
 import re
 import signal
+import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any, Dict, List, Optional
 
-import importlib.metadata
 import pytz
 import yaml
+
+from gardenlinux.constants import GL_REPOSITORY_URL
+from gardenlinux.flavors import Parser
+from gardenlinux.git import Repository
+from gardenlinux.s3 import Bucket
+
 
 ERROR_CODES = {
     "validation_error": 1,
     "subprocess_output_error": 2,
+    "subprocess_output_missing": 12,
     "no_releases": 3,
     "s3_error": 4,
+    "s3_output_error": 13,
     "query_error": 5,
     "parameter_missing": 6,
+    "input_parameter_missing": 14,
+    "input_parameter_error": 15,
     "invalid_field": 7,
     "http_error": 8,
     "file_not_found": 9,
     "format_error": 10,
     "input_error": 11,
+    "output_error": 16,
 }
+
+
+V2_SCHEMA_THRESHOLD = 2017
+
+
+def uses_patch_version(major: int) -> bool:
+    """Check if a major version requires the patch field (v2 schema)."""
+    return major >= V2_SCHEMA_THRESHOLD
+
+
+def fatal_error(message: str, code: str) -> None:
+    """Log an error message and exit with the corresponding error code."""
+    logging.error(message)
+    sys.exit(ERROR_CODES[code])
+
+
+def split_releases_by_type(
+    releases: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Split a list of releases into a dict keyed by release type."""
+    result = {
+        "next": [],
+        "major": [],
+        "minor": [],
+        "nightly": [],
+        "dev": [],
+    }
+    for release in releases:
+        release_type = release.get("type")
+        if release_type in result:
+            result[release_type].append(release)
+    return result
+
+
+def merge_input_data(
+    existing_releases: List[Dict[str, Any]],
+    new_releases: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Merge two lists of releases, updating existing releases with new ones.
+
+    Releases are keyed by their ``name``; a release in ``new_releases``
+    replaces any existing release with the same name.
+    """
+    releases_by_name = {release["name"]: release for release in existing_releases}
+    for new_release in new_releases:
+        releases_by_name[new_release["name"]] = new_release
+    return list(releases_by_name.values())
+
+
+def run_subprocess(command: List[str], error_msg: str) -> str:
+    """Run a subprocess command and return stdout, or exit with error."""
+    result = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    if result.returncode != 0:
+        fatal_error(f"{error_msg}: {result.stderr}", "subprocess_output_error")
+    return result.stdout
+
 
 DEFAULTS = {
     # Release types
@@ -50,6 +124,7 @@ DEFAULTS = {
     "ARTIFACTS_S3_BUCKET_NAME": "gardenlinux-github-releases",
     "ARTIFACTS_S3_PREFIX": "objects/",
     "ARTIFACTS_S3_BASE_URL": ("https://gardenlinux-github-releases.s3.amazonaws.com"),
+    "ARTIFACTS_S3_CACHE_FILE": "artifacts-cache.json",
     # Garden Linux repository
     "GL_REPO_NAME": "gardenlinux",
     "GL_REPO_OWNER": "gardenlinux",
@@ -126,8 +201,22 @@ def isodate_to_timestamp(isodate):
 
 def timestamp_to_isodate(timestamp):
     """Convert timestamp to ISO date."""
-    dt = datetime.utcfromtimestamp(timestamp)
+    dt = datetime.fromtimestamp(timestamp, timezone.utc)
     return dt.strftime("%Y-%m-%d")
+
+
+def parse_isodatetime(value: str, field_name: str) -> Optional[datetime]:
+    """
+    Parse an ISO datetime string and return a timezone-aware datetime.
+    Exits with error if parsing fails.
+    """
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
+    except ValueError:
+        fatal_error(
+            f"Invalid --{field_name} format. Use ISO format: YYYY-MM-DDTHH:MM:SS",
+            "validation_error",
+        )
 
 
 # Handle SIGPIPE and BrokenPipeError
@@ -145,3 +234,205 @@ class NoAliasDumper(yaml.SafeDumper):
 
 
 signal.signal(signal.SIGPIPE, handle_broken_pipe_error)
+
+
+def get_flavors_from_git(commit: str) -> List[str]:
+    """
+    Get flavors from Git repository using gardenlinux library.
+
+    Args:
+        commit: Git commit hash (or 'latest')
+
+    Returns:
+        List of flavor strings
+    """
+
+    try:
+        with TemporaryDirectory() as git_directory:
+            # Use gardenlinux Repository class for sparse checkout with pygit2
+            Repository.checkout_repo_sparse(
+                git_directory=git_directory,
+                repo_url=GL_REPOSITORY_URL,
+                commit=commit if commit != "latest" else None,
+                pathspecs=["flavors.yaml"],  # Only checkout the flavors.yaml file
+            )
+
+            flavors_file = Path(git_directory, "flavors.yaml")
+            if flavors_file.exists():
+                with flavors_file.open("r") as fp:
+                    flavors_data = fp.read()
+                    flavors_yaml = yaml.safe_load(flavors_data)
+                    parser = Parser(flavors_yaml)
+                    combinations = parser.filter()
+                    all_flavors = set(combination for _, combination in combinations)
+                    flavors = sorted(all_flavors)
+                    logging.info(f"Found {len(flavors)} flavors in Git")
+                    return flavors
+            else:
+                logging.warning("flavors.yaml not found in repository")
+                return []
+    except Exception as exc:
+        logging.debug(f"Could not get flavors from Git: {exc}")
+        return []
+
+
+def skip_flavors_lookup() -> bool:
+    """
+    Return True if flavor resolution (Git clone / S3 lookup) should be skipped.
+
+    Flavor resolution requires network access (a Git clone of the Garden Linux
+    repository and/or an S3 listing). Skipping is useful for offline usage and
+    for tests, which must never touch the network or S3.
+
+    Skipping is enabled when the ``GLRD_SKIP_FLAVORS`` environment variable is
+    set to a truthy value (``1``, ``true``, ``yes``, ``on``; case-insensitive).
+    """
+    return os.environ.get("GLRD_SKIP_FLAVORS", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def resolve_flavors(
+    commit: str,
+    version: Dict[str, Any],
+    skip: bool = False,
+) -> List[str]:
+    """
+    Resolve the flavors for a release, trying Git first and S3 as a fallback.
+
+    This centralizes the previously duplicated git-then-S3 fallback logic used
+    by both ``glrd-manage`` (create) and ``glrd-update``.
+
+    Args:
+        commit: Git commit hash of the release.
+        version: Version dict with at least ``major`` (and optionally ``minor``).
+        skip: If True (or if ``skip_flavors_lookup()`` is True), no network
+              access is performed and an empty list is returned. This keeps the
+              operation fully offline.
+
+    Returns:
+        Sorted list of flavor strings (possibly empty).
+    """
+    if skip or skip_flavors_lookup():
+        logging.info("Skipping flavor lookup (offline mode / GLRD_SKIP_FLAVORS set).")
+        return []
+
+    # First try flavors.yaml from the Git repository.
+    flavors = get_flavors_from_git(commit)
+    if flavors:
+        return flavors
+
+    # Fall back to S3 artifacts.
+    logging.info("No flavors found in flavors.yaml, checking S3 artifacts...")
+    artifacts_data = get_s3_artifacts_data(
+        DEFAULTS["ARTIFACTS_S3_BUCKET_NAME"],
+        DEFAULTS["ARTIFACTS_S3_PREFIX"],
+        DEFAULTS["ARTIFACTS_S3_CACHE_FILE"],
+    )
+    if artifacts_data:
+        return get_flavors_from_s3_artifacts(artifacts_data, version, commit)
+
+    logging.warning("No artifacts data available from S3")
+    return []
+
+
+def get_s3_artifacts_data(
+    bucket_name: str,
+    prefix: str,
+    cache_file: Optional[str] = None,
+    cache_ttl: int = 3600,
+) -> Optional[Dict]:
+    """
+    Get S3 artifacts data using gardenlinux library with caching support.
+
+    Args:
+        bucket_name: S3 bucket name
+        prefix: S3 prefix
+        cache_file: Optional cache file path for S3 object keys
+        cache_ttl: Cache time-to-live in seconds (default: 1 hour)
+
+    Returns:
+        Dictionary containing S3 artifacts data with 'index' and 'artifacts' keys
+    """
+
+    try:
+        bucket = Bucket(bucket_name)
+
+        artifacts = bucket.read_cache_file_or_filter(
+            cache_file, cache_ttl=cache_ttl, Prefix=prefix
+        )
+
+        index = {}
+        for key in artifacts:
+            try:
+                parts = key.split("/")
+                if len(parts) >= 3:
+                    version_commit = parts[1]
+                    if "-" in version_commit:
+                        version_part, commit_part = version_commit.split("-", 1)
+                        if version_part not in index:
+                            index[version_part] = []
+                        index[version_part].append(key)
+            except Exception as e:
+                logging.debug(f"Could not parse version from key {key}: {e}")
+
+        result = {"index": index, "artifacts": artifacts}
+        logging.info(f"Found {len(artifacts)} artifacts and {len(index)} index entries")
+        return result
+    except Exception as e:
+        logging.error(f"Error getting S3 artifacts: {e}")
+        return None
+
+
+def get_flavors_from_s3_artifacts(
+    artifacts_data: Dict, version: Dict[str, Any], commit: str
+) -> List[str]:
+    """
+    Extract flavors from S3 artifacts data.
+
+    Args:
+        artifacts_data: S3 artifacts data dictionary
+        version: Version dictionary with major, minor, micro
+        commit: Git commit hash
+
+    Returns:
+        List of flavor strings
+    """
+
+    try:
+        version_info = f"{version['major']}.{version.get('minor', 0)}"
+        commit_short = commit[:8]
+
+        # Try index lookup first
+        search_key = f"{version_info}-{commit_short}"
+        if search_key in artifacts_data.get("index", {}):
+            flavors = artifacts_data["index"][search_key]
+            logging.debug(f"Found flavors in S3 index for {search_key}")
+            return flavors
+        else:
+            # Search through artifacts
+            found_flavors = set()
+            for key in artifacts_data.get("artifacts", []):
+                if version_info in key and commit_short in key:
+                    try:
+                        parts = key.split("/")
+                        if len(parts) >= 2:
+                            flavor_with_version = parts[1]
+                            flavor = flavor_with_version.rsplit(f"-{version_info}", 1)[
+                                0
+                            ]
+                            if flavor:
+                                found_flavors.add(flavor)
+                    except Exception as e:
+                        logging.debug(f"Error parsing artifact key {key}: {e}")
+                        continue
+            flavors = sorted(found_flavors)
+            if flavors:
+                logging.info(f"Found {len(flavors)} flavors in S3 artifacts")
+            return flavors
+    except Exception as e:
+        logging.error(f"Error processing S3 artifacts: {e}")
+        return []

@@ -4,7 +4,7 @@ dynamic = ["version"]
 
 [tool.poetry]
 name = "glrd"
-version = "0.0.0"
+version = "4.2.0.post12.dev0+d0979c4.dirty"
 description = "Garden Linux Release Database"
 authors = ["Garden Linux Team"]
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ readme = "README.md"
 packages = [{include = "glrd"}]
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = ">=3.13,<3.14.1"
 poetry-dynamic-versioning = "*"
 boto3 = "*"
 deepdiff = "*"
@@ -20,9 +20,10 @@ jsonschema = "*"
 PyYAML = "*"
 pytz = "*"
 python-dateutil = "*"
+pygit2 = "*"
 requests = "*"
 tabulate = "*"
-python-gardenlinux-lib = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", branch = "0.6.0" }
+gardenlinux = { git = "https://github.com/gardenlinux/python-gardenlinux-lib.git", tag = "0.10.21" }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
@@ -32,7 +33,7 @@ flake8 = "*"
 autopep8 = "*"
 
 [tool.poetry-dynamic-versioning]
-enable = true
+enable = false
 vcs = "git"
 style = "pep440"
 pattern = '''(?x)
