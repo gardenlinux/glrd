@@ -130,7 +130,8 @@ DEFAULTS = {
     "GL_REPO_OWNER": "gardenlinux",
     "GL_REPO_URL": "https://github.com/gardenlinux/gardenlinux",
     # Container registry configuration
-    "CONTAINER_REGISTRY": "ghcr.io/gardenlinux/gardenlinux",
+    "CONTAINER_REGISTRY_MINOR": "ghcr.io/gardenlinux/gardenlinux",
+    "CONTAINER_REGISTRY_NIGHTLY": "ghcr.io/gardenlinux/nightly",
     # Platform file extensions
     "PLATFORM_EXTENSIONS": {
         "ali": "qcow2",

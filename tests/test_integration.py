@@ -1428,3 +1428,190 @@ class TestGLRDIntegration:
         release = data["releases"][0]
         assert release["name"] == "nightly-2017.0.0"
         assert release["flavors"] == []
+
+    # ============================================================================
+    # OCI URL TESTS
+    # ============================================================================
+
+    def _seed_nightly_releases_file(self, test_dir, manage_script, prefix):
+        """Create a local releases-nightly.json with a container-amd64 release.
+
+        Uses a v1-schema version (major < 2017) to avoid v2 patch-required
+        validation.  The resulting file is written to ``{prefix}-nightly.json``.
+        """
+        releases_json = {
+            "releases": [
+                {
+                    "name": "nightly-1990.0",
+                    "type": "nightly",
+                    "version": {"major": 1990, "minor": 0},
+                    "lifecycle": {
+                        "released": {
+                            "isodate": "2020-01-01",
+                            "timestamp": 1577836800,
+                        },
+                    },
+                    "git": {
+                        "commit": "c" * 40,
+                        "commit_short": "cccccccc",
+                    },
+                    "github": {
+                        "release": (
+                            "https://github.com/gardenlinux/gardenlinux/"
+                            "releases/tag/1990.0"
+                        )
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                },
+            ]
+        }
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(releases_json),
+        )
+        return f"{prefix}-nightly.json"
+
+    def _seed_minor_oci_releases_file(self, test_dir, manage_script, prefix):
+        """Create a local releases-minor.json with a single container-amd64 release."""
+        releases_json = {
+            "releases": [
+                {
+                    "name": "minor-2017.0.0",
+                    "type": "minor",
+                    "version": {"major": 2017, "minor": 0, "patch": 0},
+                    "lifecycle": {
+                        "released": {
+                            "isodate": "2020-01-01",
+                            "timestamp": 1577836800,
+                        },
+                        "eol": {
+                            "isodate": "2999-01-01",
+                            "timestamp": 32472144000,
+                        },
+                    },
+                    "git": {
+                        "commit": "d" * 40,
+                        "commit_short": "dddddddd",
+                    },
+                    "github": {
+                        "release": (
+                            "https://github.com/gardenlinux/gardenlinux/"
+                            "releases/tag/2017.0.0"
+                        )
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                },
+            ]
+        }
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(releases_json),
+        )
+        return f"{prefix}-minor.json"
+
+    def test_oci_url_in_nightly_query_output(
+        self, test_dir, manage_script, query_script
+    ):
+        """Nightly releases use the nightly container registry in OCI output."""
+        prefix = os.path.join(test_dir, "releases-oci-nightly")
+        self._seed_nightly_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "nightly",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        assert len(data["releases"]) == 1
+        release = data["releases"][0]
+        assert release["oci"].startswith("ghcr.io/gardenlinux/nightly")
+
+    def test_oci_url_in_minor_query_output(self, test_dir, manage_script, query_script):
+        """Minor releases use the stable container registry in OCI output."""
+        prefix = os.path.join(test_dir, "releases-oci-minor")
+        self._seed_minor_oci_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        assert len(data["releases"]) == 1
+        release = data["releases"][0]
+        assert release["oci"].startswith("ghcr.io/gardenlinux/gardenlinux")
+
+    def test_oci_url_differs_by_type(self, test_dir, manage_script, query_script):
+        """Nightly and minor releases produce different OCI registry prefixes."""
+        nightly_prefix = os.path.join(test_dir, "releases-oci-diff-nightly")
+        minor_prefix = os.path.join(test_dir, "releases-oci-diff-minor")
+        self._seed_nightly_releases_file(test_dir, manage_script, nightly_prefix)
+        self._seed_minor_oci_releases_file(test_dir, manage_script, minor_prefix)
+
+        nightly_result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "nightly",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                nightly_prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        minor_result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                minor_prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+
+        nightly_oci = json.loads(nightly_result.stdout)["releases"][0]["oci"]
+        minor_oci = json.loads(minor_result.stdout)["releases"][0]["oci"]
+
+        assert nightly_oci.startswith("ghcr.io/gardenlinux/nightly")
+        assert minor_oci.startswith("ghcr.io/gardenlinux/gardenlinux")
+        assert nightly_oci != minor_oci

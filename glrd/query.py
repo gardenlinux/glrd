@@ -577,14 +577,23 @@ def get_platform_from_flavor(flavor):
         sys.exit(ERROR_CODES["format_error"])
 
 
-def prepare_oci_flavor_url(flavor, version, platform):
+def get_container_registry(release_type):
+    """Return the container registry URL for the given release type."""
+    if release_type == "nightly":
+        return DEFAULTS["CONTAINER_REGISTRY_NIGHTLY"]
+    return DEFAULTS["CONTAINER_REGISTRY_MINOR"]
+
+
+def prepare_oci_flavor_url(flavor, version, platform, release_type=None):
     """Create OCI URL for container/bare platforms."""
     try:
         if platform == "container":
-            return {"oci": f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"}
+            return {"oci": f"{get_container_registry(release_type)}:{version}"}
         elif platform == "bare":
             flavor_base = "-".join(flavor.split("-")[:-1])
-            return {"oci": f"{DEFAULTS['CONTAINER_REGISTRY']}/{flavor_base}:{version}"}
+            return {
+                "oci": f"{get_container_registry(release_type)}/{flavor_base}:{version}"
+            }
     except Exception as e:
         logging.error(f"Error creating URLs for container/bare platforms: {e}")
         sys.exit(ERROR_CODES["format_error"])
@@ -629,7 +638,9 @@ def format_flavors_with_urls(release):
 
             # Handle OCI-based platforms
             if platform in ["container", "bare"]:
-                urls = prepare_oci_flavor_url(flavor, version, platform)
+                urls = prepare_oci_flavor_url(
+                    flavor, version, platform, release.get("type")
+                )
                 if urls:
                     oci_flavors[flavor] = urls
                 continue
@@ -652,7 +663,7 @@ def get_oci_url(release):
     try:
         # Get version string respecting versioned schemas
         version = get_version_string(release["version"], release.get("type"))
-        return f"{DEFAULTS['CONTAINER_REGISTRY']}:{version}"
+        return f"{get_container_registry(release.get('type'))}:{version}"
     except Exception as e:
         logging.error(f"Error getting OCI URL: {e}")
         sys.exit(ERROR_CODES["format_error"])
