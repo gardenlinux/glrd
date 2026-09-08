@@ -19,15 +19,12 @@ from glrd.git import (
     create_initial_nightly_releases,
 )
 from glrd.query import load_all_releases
-from glrd.release import (
-    GitInfo,
-    Lifecycle,
-    LifecyclePhase,
-    Release,
-    ReleaseType,
-    Version,
-    parse_release_name as model_parse_release_name,
-)
+from glrd.git_info import GitInfo
+from glrd.lifecycle import Lifecycle, LifecyclePhase
+from glrd.release_model import Release
+from glrd.release_name import parse_release_name as model_parse_release_name
+from glrd.release_type import ReleaseType
+from glrd.version import Version
 from glrd.s3 import (
     create_s3_bucket,
     download_all_s3_files,

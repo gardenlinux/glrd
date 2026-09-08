@@ -9,7 +9,9 @@ import requests
 import tabulate
 import yaml
 
-from glrd.release import Release, ReleaseCollection, ReleaseType
+from glrd.release_collection import ReleaseCollection
+from glrd.release_model import Release
+from glrd.release_type import ReleaseType
 from glrd.util import (
     DEFAULTS,
     ERROR_CODES,

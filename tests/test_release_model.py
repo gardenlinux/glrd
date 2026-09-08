@@ -1,5 +1,5 @@
 """
-Unit tests for the release domain model (glrd/release.py).
+Unit tests for the release domain model.
 
 The release model is the single source of truth for parsing, version handling,
 name generation, and serialization. These tests are pure and fully offline.
@@ -7,16 +7,13 @@ name generation, and serialization. These tests are pure and fully offline.
 
 import pytest
 
-from glrd.release import (
-    GitInfo,
-    Lifecycle,
-    LifecyclePhase,
-    Release,
-    ReleaseCollection,
-    ReleaseType,
-    Version,
-    parse_release_name,
-)
+from glrd.git_info import GitInfo
+from glrd.lifecycle import Lifecycle, LifecyclePhase
+from glrd.release_collection import ReleaseCollection
+from glrd.release_model import Release
+from glrd.release_name import parse_release_name
+from glrd.release_type import ReleaseType
+from glrd.version import Version
 
 
 @pytest.mark.unit
