@@ -10,7 +10,6 @@ set.
 """
 
 import logging
-import shutil
 import sys
 import tempfile
 from datetime import datetime
@@ -24,8 +23,8 @@ from gardenlinux.github import Client
 
 from glrd.util import DEFAULTS, ERROR_CODES, extract_version_data, isodate_to_timestamp
 
-# Global variable to cache the repository clone path
-_repo_clone_path: Optional[str] = None
+# Global variable to cache the temporary directory object
+_temp_dir_obj: Optional[tempfile.TemporaryDirectory] = None
 
 # Cached pygit2 Repository object (kept open while the clone is alive)
 _repo_instance: Optional[Repository] = None
@@ -131,7 +130,7 @@ def get_git_commit_at_time(
     Returns:
         Tuple of (full_commit_sha, short_commit_sha)
     """
-    global _repo_clone_path, _repo_instance
+    global _temp_dir_obj, _repo_instance
 
     # Convert the input date and time to UTC epoch for comparison.
     target_time = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").astimezone(
@@ -140,8 +139,9 @@ def get_git_commit_at_time(
     target_epoch = int(target_time.astimezone(pytz.UTC).timestamp())
 
     # Clone once and reuse on subsequent calls.
-    if _repo_clone_path is None or _repo_instance is None:
-        temp_dir = tempfile.mkdtemp(prefix="glrd_temp_repo_")
+    if _temp_dir_obj is None or _repo_instance is None:
+        _temp_dir_obj = tempfile.TemporaryDirectory(prefix="glrd_temp_repo_")
+        temp_dir = _temp_dir_obj.name
         logging.debug(f"Cloning {remote_repo} into {temp_dir}")
         try:
             _repo_instance = Repository.checkout_repo(
@@ -149,10 +149,10 @@ def get_git_commit_at_time(
                 repo_url=remote_repo,
                 branch=branch,
             )
-            _repo_clone_path = temp_dir
         except Exception as exc:
             _repo_instance = None
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            _temp_dir_obj.cleanup()
+            _temp_dir_obj = None
             logging.error(f"Error cloning remote repository: {exc}")
             sys.exit(ERROR_CODES["subprocess_output_error"])
 
@@ -187,15 +187,15 @@ def cleanup_temp_repo() -> None:
 
     This function can be registered as an atexit handler.
     """
-    global _repo_clone_path, _repo_instance
+    global _temp_dir_obj, _repo_instance
 
-    # Dereference the pygit2 object before rmtree so file handles are released.
+    # Dereference the pygit2 object before cleanup so file handles are released.
     if _repo_instance is not None:
         _repo_instance = None
 
-    if _repo_clone_path:
-        shutil.rmtree(_repo_clone_path, ignore_errors=True)
-        _repo_clone_path = None
+    if _temp_dir_obj is not None:
+        _temp_dir_obj.cleanup()
+        _temp_dir_obj = None
 
 
 def get_garden_version_for_date(

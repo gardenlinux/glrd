@@ -212,7 +212,7 @@ def local_git_repo(tmp_path):
 class TestGetGitCommitAtTime:
     def setup_method(self):
         # Reset module-level cache before each test.
-        git_module._repo_clone_path = None
+        git_module._temp_dir_obj = None
         git_module._repo_instance = None
 
     def teardown_method(self):
@@ -251,7 +251,7 @@ class TestGetGitCommitAtTime:
                 branch="main",
                 remote_repo=local_git_repo["repo_url"],
             )
-            first_path = git_module._repo_clone_path
+            first_path = git_module._temp_dir_obj.name
 
             # Second call must NOT clone again.
             git_module.get_git_commit_at_time(
@@ -260,11 +260,29 @@ class TestGetGitCommitAtTime:
                 branch="main",
                 remote_repo=local_git_repo["repo_url"],
             )
-            assert git_module._repo_clone_path == first_path
+            assert git_module._temp_dir_obj.name == first_path
             assert p.call_count == 1
 
-    def test_no_commit_before_very_early_date_exits(self, local_git_repo):
-        # epoch 100 is before all commits; should exit.
+    def test_clone_error_cleans_up(self, local_git_repo):
+        """If checkout_repo raises, _temp_dir_obj must be cleaned up and set to None."""
+        with patch(
+            "glrd.git.Repository.checkout_repo",
+            side_effect=Exception("clone failed"),
+        ):
+            with pytest.raises(SystemExit):
+                git_module.get_git_commit_at_time(
+                    date="2024-01-01",
+                    time="06:00",
+                    branch="main",
+                    remote_repo=local_git_repo["repo_url"],
+                )
+
+        assert git_module._temp_dir_obj is None
+        assert git_module._repo_instance is None
+
+    def test_no_commit_before_very_early_date_exits(
+        self, local_git_repo
+    ):  # epoch 100 is before all commits; should exit.
         target_dt = datetime.fromtimestamp(100, tz=pytz.UTC)
         date_str = target_dt.strftime("%Y-%m-%d")
         time_str = target_dt.strftime("%H:%M")
@@ -288,17 +306,20 @@ class TestCleanupTempRepo:
         clone_dir = tmp_path / "clone"
         clone_dir.mkdir()
 
-        git_module._repo_clone_path = str(clone_dir)
+        mock_temp_dir = MagicMock()
+        mock_temp_dir.cleanup.side_effect = lambda: clone_dir.rmdir()
+        git_module._temp_dir_obj = mock_temp_dir
         git_module._repo_instance = MagicMock()
 
         git_module.cleanup_temp_repo()
 
         assert not clone_dir.exists()
-        assert git_module._repo_clone_path is None
+        mock_temp_dir.cleanup.assert_called_once()
+        assert git_module._temp_dir_obj is None
         assert git_module._repo_instance is None
 
     def test_cleanup_is_idempotent(self):
-        git_module._repo_clone_path = None
+        git_module._temp_dir_obj = None
         git_module._repo_instance = None
         # Should not raise.
         git_module.cleanup_temp_repo()
