@@ -270,52 +270,53 @@ def create_single_release(release_type, args, existing_releases):
         timestamp=lifecycle_released_timestamp,
     )
 
-    if rtype in (ReleaseType.NEXT, ReleaseType.MAJOR):
-        lifecycle = Lifecycle(
-            released=released_phase,
-            extended=LifecyclePhase(
-                isodate=lifecycle_extended_isodate,
-                timestamp=lifecycle_extended_timestamp,
-            ),
-            eol=LifecyclePhase(
-                isodate=lifecycle_eol_isodate,
-                timestamp=lifecycle_eol_timestamp,
-            ),
-        )
-        release_obj = Release(
-            name=Release.default_name(rtype, version_obj),
-            type=rtype,
-            version=version_obj,
-            lifecycle=lifecycle,
-        )
-    elif rtype == ReleaseType.MINOR:
-        lifecycle = Lifecycle(
-            released=released_phase,
-            eol=LifecyclePhase(
-                isodate=lifecycle_eol_isodate,
-                timestamp=lifecycle_eol_timestamp,
-            ),
-        )
-        release_obj = Release(
-            name=Release.default_name(rtype, version_obj),
-            type=rtype,
-            version=version_obj,
-            lifecycle=lifecycle,
-            git=GitInfo(commit=commit, commit_short=commit_short),
-            github={"release": Release.github_release_url(version_obj, rtype)},
-            flavors=flavors,
-            attributes={"source_repo": True},
-        )
-    else:  # dev, nightly
-        release_obj = Release(
-            name=Release.default_name(rtype, version_obj),
-            type=rtype,
-            version=version_obj,
-            lifecycle=Lifecycle(released=released_phase),
-            git=GitInfo(commit=commit, commit_short=commit_short),
-            flavors=flavors,
-            attributes={"source_repo": True},
-        )
+    match rtype:
+        case ReleaseType.NEXT | ReleaseType.MAJOR:
+            lifecycle = Lifecycle(
+                released=released_phase,
+                extended=LifecyclePhase(
+                    isodate=lifecycle_extended_isodate,
+                    timestamp=lifecycle_extended_timestamp,
+                ),
+                eol=LifecyclePhase(
+                    isodate=lifecycle_eol_isodate,
+                    timestamp=lifecycle_eol_timestamp,
+                ),
+            )
+            release_obj = Release(
+                name=Release.default_name(rtype, version_obj),
+                type=rtype,
+                version=version_obj,
+                lifecycle=lifecycle,
+            )
+        case ReleaseType.MINOR:
+            lifecycle = Lifecycle(
+                released=released_phase,
+                eol=LifecyclePhase(
+                    isodate=lifecycle_eol_isodate,
+                    timestamp=lifecycle_eol_timestamp,
+                ),
+            )
+            release_obj = Release(
+                name=Release.default_name(rtype, version_obj),
+                type=rtype,
+                version=version_obj,
+                lifecycle=lifecycle,
+                git=GitInfo(commit=commit, commit_short=commit_short),
+                github={"release": Release.github_release_url(version_obj, rtype)},
+                flavors=flavors,
+                attributes={"source_repo": True},
+            )
+        case _:  # dev, nightly
+            release_obj = Release(
+                name=Release.default_name(rtype, version_obj),
+                type=rtype,
+                version=version_obj,
+                lifecycle=Lifecycle(released=released_phase),
+                git=GitInfo(commit=commit, commit_short=commit_short),
+                flavors=flavors,
+                attributes={"source_repo": True},
+            )
 
     release = release_obj.to_dict()
     logging.debug(f"Release '{release['name']}' created.")
