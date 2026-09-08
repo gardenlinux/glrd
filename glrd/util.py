@@ -5,6 +5,7 @@ import re
 import signal
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -53,11 +54,22 @@ def fatal_error(message: str, code: str) -> None:
     sys.exit(ERROR_CODES[code])
 
 
+@dataclass
+class ReleasesByType:
+    """Typed container for releases split by type."""
+
+    next: List[Dict[str, Any]]
+    major: List[Dict[str, Any]]
+    minor: List[Dict[str, Any]]
+    nightly: List[Dict[str, Any]]
+    dev: List[Dict[str, Any]]
+
+
 def split_releases_by_type(
     releases: List[Dict[str, Any]],
-) -> Dict[str, List[Dict[str, Any]]]:
-    """Split a list of releases into a dict keyed by release type."""
-    result = {
+) -> ReleasesByType:
+    """Split a list of releases into a typed object keyed by release type."""
+    result: Dict[str, List[Dict[str, Any]]] = {
         "next": [],
         "major": [],
         "minor": [],
@@ -68,7 +80,13 @@ def split_releases_by_type(
         release_type = release.get("type")
         if release_type in result:
             result[release_type].append(release)
-    return result
+    return ReleasesByType(
+        next=result["next"],
+        major=result["major"],
+        minor=result["minor"],
+        nightly=result["nightly"],
+        dev=result["dev"],
+    )
 
 
 def merge_input_data(

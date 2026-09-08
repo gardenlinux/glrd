@@ -553,11 +553,11 @@ def load_input(filename):
             sys.exit(ERROR_CODES["input_parameter_missing"])
         by_type = split_releases_by_type(merged_releases)
         return (
-            by_type["next"],
-            by_type["major"],
-            by_type["minor"],
-            by_type["nightly"],
-            by_type["dev"],
+            by_type.next,
+            by_type.major,
+            by_type.minor,
+            by_type.nightly,
+            by_type.dev,
         )
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing JSON from file: {str(e)}")
@@ -580,16 +580,16 @@ def load_input_stdin():
         by_type = split_releases_by_type(merged_releases)
         logging.debug(
             f"Parsed releases from stdin - "
-            f"next: {len(by_type['next'])}, major: {len(by_type['major'])}, "
-            f"minor: {len(by_type['minor'])}, nightly: {len(by_type['nightly'])}, "
-            f"dev: {len(by_type['dev'])}"
+            f"next: {len(by_type.next)}, major: {len(by_type.major)}, "
+            f"minor: {len(by_type.minor)}, nightly: {len(by_type.nightly)}, "
+            f"dev: {len(by_type.dev)}"
         )
         return (
-            by_type["next"],
-            by_type["major"],
-            by_type["minor"],
-            by_type["nightly"],
-            by_type["dev"],
+            by_type.next,
+            by_type.major,
+            by_type.minor,
+            by_type.nightly,
+            by_type.dev,
         )
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing JSON from stdin: {str(e)}")
