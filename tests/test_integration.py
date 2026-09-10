@@ -20,13 +20,27 @@ class TestGLRDIntegration:
     """Integration tests for GLRD manage and query commands."""
 
     def run_manage_command(self, manage_script, args, expect_success=True):
-        """Run glrd-manage command and return result."""
-        cmd = [sys.executable, manage_script] + args
+        """Run glrd-manage command and return result.
+
+        When the command queries existing releases (i.e. it does not pass
+        ``--no-query`` and does not already choose an ``--input-type``), a
+        non-existent local input prefix is injected so the query runs fully
+        offline instead of reaching out to the production S3 URL.
+        """
+        if "--input-type" not in args and "--no-query" not in args:
+            args = args + [
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                os.path.join(os.path.dirname(manage_script), "does-not-exist-glrd"),
+            ]
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [sys.executable, "-m", "glrd.manage"] + args
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(manage_script),
+            cwd=project_root,
         )
 
         if expect_success:
@@ -46,14 +60,26 @@ class TestGLRDIntegration:
     def run_manage_command_stdin(
         self, manage_script, args, stdin_data, expect_success=True
     ):
-        """Run glrd-manage command with data on stdin and return result."""
-        cmd = [sys.executable, manage_script] + args
+        """Run glrd-manage command with data on stdin and return result.
+
+        Injects an offline local input prefix when the command queries
+        existing releases, so no network/S3 access is attempted.
+        """
+        if "--input-type" not in args and "--no-query" not in args:
+            args = args + [
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                os.path.join(os.path.dirname(manage_script), "does-not-exist-glrd"),
+            ]
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [sys.executable, "-m", "glrd.manage"] + args
         result = subprocess.run(
             cmd,
             input=stdin_data,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(manage_script),
+            cwd=project_root,
         )
 
         if expect_success:
@@ -72,12 +98,13 @@ class TestGLRDIntegration:
 
     def run_query_command(self, query_script, args):
         """Run glrd query command and return result."""
-        cmd = [sys.executable, query_script] + args
+        project_root = os.path.dirname(os.path.dirname(query_script))
+        cmd = [sys.executable, "-m", "glrd.query"] + args
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(query_script),
+            cwd=project_root,
         )
 
         assert result.returncode == 0, (
@@ -120,6 +147,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 version,
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -167,6 +196,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 version,
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -208,6 +239,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 version,
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -256,6 +289,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 version,
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -288,6 +323,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 "2017.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -308,6 +345,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 "2017.0.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -331,6 +370,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 "1990.0.1",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -352,6 +393,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 "2222.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -504,6 +547,8 @@ class TestGLRDIntegration:
                 "dev",
                 "--version",
                 "1990.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -529,6 +574,8 @@ class TestGLRDIntegration:
                 "dev",
                 "--version",
                 "2017.0.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -559,6 +606,8 @@ class TestGLRDIntegration:
                 "nightly",
                 "--version",
                 "1990.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -652,6 +701,8 @@ class TestGLRDIntegration:
                 "dev",
                 "--version",
                 "1990.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
                 "--output-format",
                 "json",
                 "--output-file-prefix",
@@ -853,6 +904,8 @@ class TestGLRDIntegration:
                     "nightly",
                     "--version",
                     version,
+                    "--commit",
+                    "deadbeef1234567890abcdef1234567890abcdef",
                     "--output-format",
                     "json",
                     "--output-file-prefix",
@@ -1158,3 +1211,410 @@ class TestGLRDIntegration:
 
         # Note: next releases don't use git commit info and require lifecycle dates,
         # so we skip testing next releases with custom commit
+
+    # ============================================================================
+    # QUERY FILTER TESTS (offline: seed local files, query with filters)
+    # ============================================================================
+
+    def _seed_minor_releases_file(self, test_dir, manage_script, prefix):
+        """Create a local releases-minor.json with one archived and one active
+        release, plus a newer active patch, and return the file path.
+
+        Uses far-past and far-future EOL timestamps so the active/archived
+        classification is stable regardless of the current date.
+        """
+        releases_json = {
+            "releases": [
+                {
+                    "name": "minor-2017.0.0",
+                    "type": "minor",
+                    "version": {"major": 2017, "minor": 0, "patch": 0},
+                    "lifecycle": {
+                        "released": {"isodate": "2020-01-01", "timestamp": 1577836800},
+                        # EOL in the far past -> archived
+                        "eol": {"isodate": "2020-06-01", "timestamp": 1590969600},
+                    },
+                    "git": {
+                        "commit": "a" * 40,
+                        "commit_short": "aaaaaaaa",
+                    },
+                    "github": {
+                        "release": (
+                            "https://github.com/gardenlinux/gardenlinux/"
+                            "releases/tag/2017.0.0"
+                        )
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                },
+                {
+                    "name": "minor-2017.0.1",
+                    "type": "minor",
+                    "version": {"major": 2017, "minor": 0, "patch": 1},
+                    "lifecycle": {
+                        "released": {"isodate": "2020-06-01", "timestamp": 1590969600},
+                        # EOL in the far future -> active
+                        "eol": {"isodate": "2999-01-01", "timestamp": 32472144000},
+                    },
+                    "git": {
+                        "commit": "b" * 40,
+                        "commit_short": "bbbbbbbb",
+                    },
+                    "github": {
+                        "release": (
+                            "https://github.com/gardenlinux/gardenlinux/"
+                            "releases/tag/2017.0.1"
+                        )
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                },
+            ]
+        }
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(releases_json),
+        )
+        return f"{prefix}-minor.json"
+
+    def test_query_active_filter(self, test_dir, manage_script, query_script):
+        """--active returns only releases whose EOL is in the future."""
+        prefix = os.path.join(test_dir, "releases-active")
+        self._seed_minor_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--active",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        names = {r["name"] for r in data["releases"]}
+        assert names == {"minor-2017.0.1"}
+
+    def test_query_archived_filter(self, test_dir, manage_script, query_script):
+        """--archived returns only releases whose EOL is in the past."""
+        prefix = os.path.join(test_dir, "releases-archived")
+        self._seed_minor_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--archived",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        names = {r["name"] for r in data["releases"]}
+        assert names == {"minor-2017.0.0"}
+
+    def test_query_latest_filter(self, test_dir, manage_script, query_script):
+        """--latest returns the single highest-versioned release."""
+        prefix = os.path.join(test_dir, "releases-latest")
+        self._seed_minor_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--latest",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        assert len(data["releases"]) == 1
+        assert data["releases"][0]["name"] == "minor-2017.0.1"
+
+    def test_query_unknown_type_is_ignored(self, test_dir, manage_script, query_script):
+        """A mix of valid and unknown --type values must not crash.
+
+        Regression test: unknown types are ignored rather than raising, so
+        `--type minor,bogus` returns the same result as `--type minor`.
+        """
+        prefix = os.path.join(test_dir, "releases-unknown-type")
+        self._seed_minor_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor,bogus",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        names = {r["name"] for r in data["releases"]}
+        assert names == {"minor-2017.0.0", "minor-2017.0.1"}
+
+    def test_query_version_filter(self, test_dir, manage_script, query_script):
+        """--version filters to an exact major.minor.patch."""
+        prefix = os.path.join(test_dir, "releases-version")
+        self._seed_minor_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--version",
+                "2017.0.0",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        names = {r["name"] for r in data["releases"]}
+        assert names == {"minor-2017.0.0"}
+
+    def test_create_no_flavors_flag(self, test_dir, manage_script):
+        """--no-flavors creates a release offline with an empty flavors list."""
+        prefix = os.path.join(test_dir, "releases-noflavors")
+        output_file = f"{prefix}-nightly.json"
+
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "nightly",
+                "--version",
+                "2017.0.0",
+                "--commit",
+                "deadbeef1234567890abcdef1234567890abcdef",
+                "--no-flavors",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "nightly-2017.0.0"
+        assert release["flavors"] == []
+
+    # ============================================================================
+    # OCI URL TESTS
+    # ============================================================================
+
+    def _seed_nightly_releases_file(self, test_dir, manage_script, prefix):
+        """Create a local releases-nightly.json with a container-amd64 release.
+
+        Uses a v1-schema version (major < 2017) to avoid v2 patch-required
+        validation.  The resulting file is written to ``{prefix}-nightly.json``.
+        """
+        releases_json = {
+            "releases": [
+                {
+                    "name": "nightly-1990.0",
+                    "type": "nightly",
+                    "version": {"major": 1990, "minor": 0},
+                    "lifecycle": {
+                        "released": {
+                            "isodate": "2020-01-01",
+                            "timestamp": 1577836800,
+                        },
+                    },
+                    "git": {
+                        "commit": "c" * 40,
+                        "commit_short": "cccccccc",
+                    },
+                    "github": {
+                        "release": (
+                            "https://github.com/gardenlinux/gardenlinux/"
+                            "releases/tag/1990.0"
+                        )
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                },
+            ]
+        }
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(releases_json),
+        )
+        return f"{prefix}-nightly.json"
+
+    def _seed_minor_oci_releases_file(self, test_dir, manage_script, prefix):
+        """Create a local releases-minor.json with a single container-amd64 release."""
+        releases_json = {
+            "releases": [
+                {
+                    "name": "minor-2017.0.0",
+                    "type": "minor",
+                    "version": {"major": 2017, "minor": 0, "patch": 0},
+                    "lifecycle": {
+                        "released": {
+                            "isodate": "2020-01-01",
+                            "timestamp": 1577836800,
+                        },
+                        "eol": {
+                            "isodate": "2999-01-01",
+                            "timestamp": 32472144000,
+                        },
+                    },
+                    "git": {
+                        "commit": "d" * 40,
+                        "commit_short": "dddddddd",
+                    },
+                    "github": {
+                        "release": (
+                            "https://github.com/gardenlinux/gardenlinux/"
+                            "releases/tag/2017.0.0"
+                        )
+                    },
+                    "flavors": ["container-amd64"],
+                    "attributes": {"source_repo": True},
+                },
+            ]
+        }
+        self.run_manage_command_stdin(
+            manage_script,
+            [
+                "--input-stdin",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+            json.dumps(releases_json),
+        )
+        return f"{prefix}-minor.json"
+
+    def test_oci_url_in_nightly_query_output(
+        self, test_dir, manage_script, query_script
+    ):
+        """Nightly releases use the nightly container registry in OCI output."""
+        prefix = os.path.join(test_dir, "releases-oci-nightly")
+        self._seed_nightly_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "nightly",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        assert len(data["releases"]) == 1
+        release = data["releases"][0]
+        assert release["oci"].startswith("ghcr.io/gardenlinux/nightly")
+
+    def test_oci_url_in_minor_query_output(self, test_dir, manage_script, query_script):
+        """Minor releases use the stable container registry in OCI output."""
+        prefix = os.path.join(test_dir, "releases-oci-minor")
+        self._seed_minor_oci_releases_file(test_dir, manage_script, prefix)
+
+        result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        data = json.loads(result.stdout)
+        assert len(data["releases"]) == 1
+        release = data["releases"][0]
+        assert release["oci"].startswith("ghcr.io/gardenlinux/gardenlinux")
+
+    def test_oci_url_differs_by_type(self, test_dir, manage_script, query_script):
+        """Nightly and minor releases produce different OCI registry prefixes."""
+        nightly_prefix = os.path.join(test_dir, "releases-oci-diff-nightly")
+        minor_prefix = os.path.join(test_dir, "releases-oci-diff-minor")
+        self._seed_nightly_releases_file(test_dir, manage_script, nightly_prefix)
+        self._seed_minor_oci_releases_file(test_dir, manage_script, minor_prefix)
+
+        nightly_result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "nightly",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                nightly_prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+        minor_result = self.run_query_command(
+            query_script,
+            [
+                "--type",
+                "minor",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                minor_prefix,
+                "--output-format",
+                "json",
+            ],
+        )
+
+        nightly_oci = json.loads(nightly_result.stdout)["releases"][0]["oci"]
+        minor_oci = json.loads(minor_result.stdout)["releases"][0]["oci"]
+
+        assert nightly_oci.startswith("ghcr.io/gardenlinux/nightly")
+        assert minor_oci.startswith("ghcr.io/gardenlinux/gardenlinux")
+        assert nightly_oci != minor_oci

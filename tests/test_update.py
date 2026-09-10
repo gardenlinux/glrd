@@ -89,14 +89,28 @@ class TestUpdateIntegration:
     def run_manage_command_stdin(
         self, manage_script, args, stdin_data, expect_success=True
     ):
-        """Run glrd-manage command with data on stdin and return result."""
-        cmd = [sys.executable, manage_script] + args
+        """Run glrd-manage command with data on stdin and return result.
+
+        A non-existent local input prefix is injected so the existing-release
+        query runs fully offline (it finds no files and falls back to an empty
+        list) instead of reaching out to the production S3 URL. Tests that
+        already specify their own ``--input-type`` are left untouched.
+        """
+        if "--input-type" not in args and "--no-query" not in args:
+            args = args + [
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                os.path.join(os.path.dirname(manage_script), "does-not-exist-glrd"),
+            ]
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [sys.executable, "-m", "glrd.manage"] + args
         result = subprocess.run(
             cmd,
             input=stdin_data,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(manage_script),
+            cwd=project_root,
         )
 
         if expect_success:
