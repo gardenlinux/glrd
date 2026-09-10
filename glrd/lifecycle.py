@@ -21,6 +21,13 @@ class LifecyclePhase:
     isodate: Optional[str] = None  # "YYYY-MM-DD"
     timestamp: Optional[int] = None  # Unix epoch
 
+    def __post_init__(self) -> None:
+        """Derive the missing field from whichever one was supplied."""
+        if self.isodate and not self.timestamp:
+            self.timestamp = isodate_to_timestamp(self.isodate)
+        elif self.timestamp and not self.isodate:
+            self.isodate = timestamp_to_isodate(self.timestamp)
+
     @classmethod
     def from_isodate(cls, isodate: str) -> "LifecyclePhase":
         """Create a LifecyclePhase from an isodate string."""
@@ -32,17 +39,6 @@ class LifecyclePhase:
         """Create a LifecyclePhase from a timestamp."""
         iso = timestamp_to_isodate(timestamp)
         return cls(isodate=iso, timestamp=timestamp)
-
-    def ensure_complete(self) -> None:
-        """
-        Ensure both isodate and timestamp are populated.
-
-        Mutates in-place: fills in missing timestamp from isodate or vice versa.
-        """
-        if self.isodate and not self.timestamp:
-            self.timestamp = isodate_to_timestamp(self.isodate)
-        elif self.timestamp and not self.isodate:
-            self.isodate = timestamp_to_isodate(self.timestamp)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -98,18 +94,6 @@ class Lifecycle:
         if self.eol and self.eol.timestamp:
             return self.eol.timestamp < ts
         return False
-
-    def ensure_complete(self) -> None:
-        """
-        Ensure timestamps/isodates are complete for all phases.
-
-        Mutates in-place.
-        """
-        self.released.ensure_complete()
-        if self.extended:
-            self.extended.ensure_complete()
-        if self.eol:
-            self.eol.ensure_complete()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""

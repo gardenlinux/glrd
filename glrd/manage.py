@@ -83,10 +83,8 @@ def ensure_isodate_and_timestamp(lifecycle):
     (released, extended, eol). If only one is present, the other is
     computed.
 
-    This operates on the raw lifecycle dict (the JSON boundary) but delegates
-    the isodate<->timestamp conversion to the release model's
-    ``LifecyclePhase.ensure_complete`` so there is a single source of truth for
-    that logic.
+    This operates on the raw lifecycle dict (the JSON boundary). Conversion
+    is handled automatically by LifecyclePhase.__post_init__.
     """
     for key in ["released", "extended", "eol"]:
         entry = lifecycle.get(key)
@@ -96,7 +94,6 @@ def ensure_isodate_and_timestamp(lifecycle):
             isodate=entry.get("isodate"),
             timestamp=entry.get("timestamp"),
         )
-        phase.ensure_complete()
         if entry.get("isodate") and not entry.get("timestamp"):
             entry["timestamp"] = phase.timestamp
         elif entry.get("timestamp") and not entry.get("isodate"):
