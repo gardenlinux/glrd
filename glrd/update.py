@@ -6,8 +6,8 @@ import sys
 
 import boto3
 
-from glrd.s3 import download_all_s3_files, upload_all_local_files
-from glrd.util import (
+from .s3 import download_all_s3_files, upload_all_local_files
+from .util import (
     DEFAULTS,
     ERROR_CODES,
     get_version,

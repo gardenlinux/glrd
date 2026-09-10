@@ -9,10 +9,10 @@ import requests
 import tabulate
 import yaml
 
-from glrd.release_collection import ReleaseCollection
-from glrd.release_model import Release
-from glrd.release_type import ReleaseType
-from glrd.util import (
+from .release_collection import ReleaseCollection
+from .release_model import Release
+from .release_type import ReleaseType
+from .util import (
     DEFAULTS,
     ERROR_CODES,
     get_current_timestamp,

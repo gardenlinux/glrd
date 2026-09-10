@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from glrd.util import DEFAULTS, ERROR_CODES, merge_input_data, NoAliasDumper
+from .util import DEFAULTS, ERROR_CODES, merge_input_data, NoAliasDumper
 
 
 def save_output_file(data: Dict[str, Any], filename: str, format: str = "yaml") -> None:

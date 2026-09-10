@@ -34,12 +34,13 @@ class TestGLRDIntegration:
                 "--input-file-prefix",
                 os.path.join(os.path.dirname(manage_script), "does-not-exist-glrd"),
             ]
-        cmd = [sys.executable, manage_script] + args
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [sys.executable, "-m", "glrd.manage"] + args
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(manage_script),
+            cwd=project_root,
         )
 
         if expect_success:
@@ -71,13 +72,14 @@ class TestGLRDIntegration:
                 "--input-file-prefix",
                 os.path.join(os.path.dirname(manage_script), "does-not-exist-glrd"),
             ]
-        cmd = [sys.executable, manage_script] + args
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [sys.executable, "-m", "glrd.manage"] + args
         result = subprocess.run(
             cmd,
             input=stdin_data,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(manage_script),
+            cwd=project_root,
         )
 
         if expect_success:
@@ -96,12 +98,13 @@ class TestGLRDIntegration:
 
     def run_query_command(self, query_script, args):
         """Run glrd query command and return result."""
-        cmd = [sys.executable, query_script] + args
+        project_root = os.path.dirname(os.path.dirname(query_script))
+        cmd = [sys.executable, "-m", "glrd.query"] + args
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(query_script),
+            cwd=project_root,
         )
 
         assert result.returncode == 0, (

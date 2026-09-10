@@ -5,7 +5,7 @@ Lifecycle dataclasses for GLRD releases.
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from glrd.util import (
+from .util import (
     get_current_timestamp,
     isodate_to_timestamp,
     timestamp_to_isodate,

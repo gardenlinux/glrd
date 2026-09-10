@@ -11,8 +11,8 @@ from typing import Dict, List, Optional, Tuple
 
 from jsonschema import ValidationError, validate
 
-from glrd.schema import SCHEMA_V1, SCHEMA_V2
-from glrd.util import ERROR_CODES, V2_SCHEMA_THRESHOLD
+from .schema import SCHEMA_V1, SCHEMA_V2
+from .util import ERROR_CODES, V2_SCHEMA_THRESHOLD
 
 
 def validate_input_version_format(

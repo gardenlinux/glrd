@@ -4,7 +4,7 @@ parse_release_name function for GLRD releases.
 
 from typing import Optional, Tuple
 
-from glrd.release_type import ReleaseType
+from .release_type import ReleaseType
 
 
 def parse_release_name(

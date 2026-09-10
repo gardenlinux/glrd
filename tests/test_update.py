@@ -103,13 +103,14 @@ class TestUpdateIntegration:
                 "--input-file-prefix",
                 os.path.join(os.path.dirname(manage_script), "does-not-exist-glrd"),
             ]
-        cmd = [sys.executable, manage_script] + args
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [sys.executable, "-m", "glrd.manage"] + args
         result = subprocess.run(
             cmd,
             input=stdin_data,
             capture_output=True,
             text=True,
-            cwd=os.path.dirname(manage_script),
+            cwd=project_root,
         )
 
         if expect_success:

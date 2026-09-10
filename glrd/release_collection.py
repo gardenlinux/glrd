@@ -4,8 +4,8 @@ ReleaseCollection class for GLRD releases.
 
 from typing import Any, Dict, List, Optional
 
-from glrd.release_model import Release
-from glrd.release_type import ReleaseType
+from .release_model import Release
+from .release_type import ReleaseType
 
 
 class ReleaseCollection:

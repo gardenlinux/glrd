@@ -21,7 +21,7 @@ import pytz
 from gardenlinux.git import Repository
 from gardenlinux.github import Client
 
-from glrd.util import DEFAULTS, ERROR_CODES, extract_version_data, isodate_to_timestamp
+from .util import DEFAULTS, ERROR_CODES, extract_version_data, isodate_to_timestamp
 
 # Global variable to cache the temporary directory object
 _temp_dir_obj: Optional[tempfile.TemporaryDirectory] = None

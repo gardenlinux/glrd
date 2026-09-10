@@ -5,10 +5,10 @@ Release dataclass for GLRD releases.
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from glrd.git_info import GitInfo
-from glrd.lifecycle import Lifecycle, LifecyclePhase
-from glrd.release_type import ReleaseType
-from glrd.version import Version
+from .git_info import GitInfo
+from .lifecycle import Lifecycle, LifecyclePhase
+from .release_type import ReleaseType
+from .version import Version
 
 
 @dataclass

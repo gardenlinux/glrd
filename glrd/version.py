@@ -5,8 +5,8 @@ Version dataclass for GLRD releases.
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from glrd.release_type import ReleaseType
-from glrd.util import V2_SCHEMA_THRESHOLD
+from .release_type import ReleaseType
+from .util import V2_SCHEMA_THRESHOLD
 
 
 @dataclass(frozen=True)

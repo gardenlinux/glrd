@@ -11,21 +11,21 @@ import yaml
 from dateutil.relativedelta import relativedelta
 from deepdiff.diff import DeepDiff
 
-from glrd.git import (
+from .git import (
     get_github_releases,
     get_git_commit_at_time,
     get_garden_version_for_date,
     create_initial_releases,
     create_initial_nightly_releases,
 )
-from glrd.query import load_all_releases
-from glrd.git_info import GitInfo
-from glrd.lifecycle import Lifecycle, LifecyclePhase
-from glrd.release_model import Release
-from glrd.release_name import parse_release_name as model_parse_release_name
-from glrd.release_type import ReleaseType
-from glrd.version import Version
-from glrd.s3 import (
+from .query import load_all_releases
+from .git_info import GitInfo
+from .lifecycle import Lifecycle, LifecyclePhase
+from .release_model import Release
+from .release_name import parse_release_name as model_parse_release_name
+from .release_type import ReleaseType
+from .version import Version
+from .s3 import (
     create_s3_bucket,
     download_all_s3_files,
     merge_existing_s3_data,
@@ -33,8 +33,8 @@ from glrd.s3 import (
     upload_all_local_files,
     upload_to_s3,
 )
-from glrd.validation import validate_input_version_format, validate_all_releases
-from glrd.util import (
+from .validation import validate_input_version_format, validate_all_releases
+from .util import (
     DEFAULTS,
     ERROR_CODES,
     get_version,
