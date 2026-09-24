@@ -1,4 +1,4 @@
-ARG GL_VERSION=nightly
+ARG GL_VERSION=latest
 ARG GL_BASE=ghcr.io/gardenlinux/gardenlinux:${GL_VERSION}
 
 FROM ${GL_BASE}
@@ -16,6 +16,7 @@ ENV PATH=${POETRY_HOME}/bin:/app/.venv/bin:$PATH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ${PYTHON}-venv \
+       git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install poetry
