@@ -4,7 +4,7 @@ dynamic = ["version"]
 
 [tool.poetry]
 name = "glrd"
-version = "4.2.0.post12.dev0+d0979c4.dirty"
+version = "0.0.0"
 description = "Garden Linux Release Database"
 authors = ["Garden Linux Team"]
 license = "Apache-2.0"
@@ -33,7 +33,7 @@ flake8 = "*"
 autopep8 = "*"
 
 [tool.poetry-dynamic-versioning]
-enable = false
+enable = true
 vcs = "git"
 style = "pep440"
 pattern = '''(?x)
