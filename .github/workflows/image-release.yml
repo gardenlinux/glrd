@@ -8,6 +8,9 @@ jobs:
   build:
     name: build
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-latest-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
     defaults:
       run:
         shell: bash
@@ -76,6 +79,8 @@ jobs:
   release:
     name: Github Release
     runs-on: 'ubuntu-latest'
+    permissions:
+      contents: write
     needs: ['push']
     steps:
       - name: Create Github Release

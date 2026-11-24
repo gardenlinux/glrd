@@ -15,6 +15,9 @@ jobs:
   build:
     name: build
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-latest-arm' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
     defaults:
       run:
         shell: bash
