@@ -28,6 +28,8 @@ Garden Linux [introduced semantic versioning](https://github.com/gardenlinux/gar
 
 The schema variant is selected automatically based on the `version.major` field value.
 
+**Schema v2.1 (current default)** is a backward-compatible evolution of v2. It adds an optional `attributes` object (including the optional `lts` flag) to `major` and `next` releases. Because the field is optional, all existing v2 release data remains valid without changes. The `major.minor.patch` threshold is unchanged (still `2017`); the `lts` flag is an orthogonal, optional addition. LTS applies from major `1877` onwards — this rule is enforced by the lifecycle/management logic, not by the schema itself.
+
 ## Major releases
 
 [Major releases](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_introduction/release.md#major-releases) are long-term supported releases.
@@ -45,6 +47,7 @@ The schema variant is selected automatically based on the `version.major` field 
 | `lifecycle.extended.timestamp` | integer       | yes      | Unix timestamp of the extended maintenance date. |
 | `lifecycle.eol.isodate`        | string (date) | yes      | End-of-life date.                                |
 | `lifecycle.eol.timestamp`      | integer       | yes      | Unix timestamp of the end-of-life date.          |
+| `attributes.lts`               | boolean       | no       | Marks a Long-Term Support major release (default `false`). LTS applies from major `1877` onwards. Added in schema v2.1. |
 
 ## Minor releases
 
@@ -126,6 +129,7 @@ The [next release](https://github.com/gardenlinux/gardenlinux/blob/main/docs/00_
 | `lifecycle.extended.timestamp` | integer       | yes      | Unix timestamp of the projected extended maintenance date. |
 | `lifecycle.eol.isodate`        | string (date) | yes      | Projected end-of-life date.                                |
 | `lifecycle.eol.timestamp`      | integer       | yes      | Unix timestamp of the projected end-of-life date.          |
+| `attributes.lts`               | boolean       | no       | Marks the upcoming major as Long-Term Support (default `false`). Added in schema v2.1. |
 
 ## Related topics
 

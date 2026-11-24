@@ -138,9 +138,9 @@ def create_single_release(release_type, args, existing_releases):
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        # for major - default extended maintenance date is release date + 6 months
+        # for major - default extended maintenance date is release date + 9 months
         if release_type == "major":
-            extended_date = release_date + relativedelta(months=6)
+            extended_date = release_date + relativedelta(months=9)
             lifecycle_extended_isodate = extended_date.strftime("%Y-%m-%d")
             lifecycle_extended_timestamp = int(extended_date.timestamp())
         # minor releases will use set_latest_minor_eol_to_major() to set lifecycle fields
@@ -163,9 +163,14 @@ def create_single_release(release_type, args, existing_releases):
             )
             sys.exit(ERROR_CODES["validation_error"])
     else:
-        # for major - default eol date is release date + 9 months
+        # for major - default eol date calculation
         if release_type == "major":
-            eol_date = release_date + relativedelta(months=9)
+            if getattr(args, "lts", False):
+                eol_date = release_date + relativedelta(years=5) + relativedelta(day=31)
+            else:
+                eol_date = (
+                    release_date + relativedelta(months=15) + relativedelta(day=31)
+                )
             lifecycle_eol_isodate = eol_date.strftime("%Y-%m-%d")
             lifecycle_eol_timestamp = int(eol_date.timestamp())
         # minor releases will use set_latest_minor_eol_to_major() to set lifecycle fields
@@ -277,11 +282,13 @@ def create_single_release(release_type, args, existing_releases):
                     timestamp=lifecycle_eol_timestamp,
                 ),
             )
+            is_lts = release_type == "major" and getattr(args, "lts", False)
             release_obj = Release(
                 name=Release.default_name(rtype, version_obj),
                 type=rtype,
                 version=version_obj,
                 lifecycle=lifecycle,
+                attributes={"lts": True} if is_lts else None,
             )
         case ReleaseType.MINOR:
             lifecycle = Lifecycle(
@@ -409,6 +416,12 @@ def update_release(
         )
         sys.exit(ERROR_CODES["validation_error"])
 
+    if getattr(args, "lts", False) and release_type not in ["major", "next"]:
+        logging.error(
+            f"Error: '--lts' is only valid for 'major' and 'next' "
+            f"release types, not '{release_type}'."
+        )
+        sys.exit(ERROR_CODES["validation_error"])
     # Find the release by name
     release = None
     for r in release_list:
@@ -494,6 +507,13 @@ def update_release(
         release["git"]["commit"] = commit
         release["git"]["commit_short"] = commit[:8]
         logging.info(f"Updated git.commit for '{args.update}' to {commit[:8]}.")
+
+    # Apply LTS flag update (only for major/next)
+    if getattr(args, "lts", False):
+        if "attributes" not in release or release["attributes"] is None:
+            release["attributes"] = {}
+        release["attributes"]["lts"] = True
+        logging.info(f"Updated attributes.lts for '{args.update}' to True.")
 
     logging.debug(f"Release '{args.update}' will be updated.")
 
@@ -763,12 +783,13 @@ def handle_releases(args):
                 args.lifecycle_extended_isodatetime,
                 args.lifecycle_eol_isodatetime,
                 args.commit,
+                args.lts,
             ]
         ):
             logging.error(
                 "Error: '--update' requires at least one of: "
                 "--lifecycle-released-isodatetime, --lifecycle-extended-isodatetime, "
-                "--lifecycle-eol-isodatetime, --commit."
+                "--lifecycle-eol-isodatetime, --commit, --lts."
             )
             sys.exit(ERROR_CODES["parameter_missing"])
 
@@ -1111,6 +1132,11 @@ def parse_arguments():
         help="Do not resolve flavors (skips the Git clone and S3 lookup). "
         "Useful for offline use and tests. Can also be enabled via the "
         "GLRD_SKIP_FLAVORS environment variable.",
+    )
+    parser.add_argument(
+        "--lts",
+        action="store_true",
+        help="Specify that this major release is an LTS (Long-Term Support) release.",
     )
     parser.add_argument(
         "--lifecycle-released-isodatetime",

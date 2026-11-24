@@ -697,6 +697,7 @@ class TestUpdateUnit:
         args.lifecycle_released_isodatetime = None
         args.lifecycle_extended_isodatetime = None
         args.lifecycle_eol_isodatetime = None
+        args.lts = False
         args.commit = "deadbeef1234567890abcdef1234567890abcdef"
 
         release = {

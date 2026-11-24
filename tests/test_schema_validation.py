@@ -3,7 +3,13 @@ Unit tests for schema validation logic.
 """
 
 import pytest
-from glrd.validation import validate_input_version_format
+from glrd.validation import (
+    validate_input_version_format,
+    validate_release_data,
+    get_schema_for_release,
+)
+from glrd.schema import SCHEMA_V2, SCHEMA_V2_1, SCHEMA_DEFAULT
+from glrd.util import SCHEMA_VERSION
 
 
 @pytest.mark.unit
@@ -135,3 +141,58 @@ class TestSchemaValidation:
             except (ValueError, IndexError):
                 # Expected for invalid formats
                 pass
+
+
+def _make_major(major, attributes=None):
+    """Build a minimal valid major release dict for schema validation."""
+    release = {
+        "name": f"major-{major}",
+        "type": "major",
+        "version": {"major": major},
+        "lifecycle": {
+            "released": {"isodate": "2025-05-26", "timestamp": 1748217600},
+            "extended": {"isodate": "2026-02-26", "timestamp": 1772064000},
+            "eol": {"isodate": "2030-05-31", "timestamp": 1906675200},
+        },
+    }
+    if attributes is not None:
+        release["attributes"] = attributes
+    return release
+
+
+@pytest.mark.unit
+class TestSchemaV21:
+    """Unit tests for the backward-compatible v2.1 schema."""
+
+    def test_schema_default_is_v2_1_alias(self):
+        """v2.1 is the default and is a structural alias of v2."""
+        assert SCHEMA_DEFAULT is SCHEMA_V2_1
+        assert SCHEMA_V2_1 is SCHEMA_V2
+
+    def test_schema_version_constant(self):
+        """The internal schema version identifier is 2.1."""
+        assert SCHEMA_VERSION == "2.1"
+
+    def test_major_uses_default_schema(self):
+        """Major releases are validated against the default (v2.1) schema."""
+        assert get_schema_for_release(_make_major(1877)) is SCHEMA_DEFAULT["major"]
+
+    def test_major_without_attributes_is_valid(self):
+        """Existing v2 data without attributes stays valid (backward compat)."""
+        errors = []
+        assert validate_release_data(_make_major(1592), errors) is True
+        assert errors == []
+
+    def test_major_with_lts_true_is_valid(self):
+        """A major release flagged as LTS validates."""
+        errors = []
+        release = _make_major(1877, attributes={"lts": True})
+        assert validate_release_data(release, errors) is True
+        assert errors == []
+
+    def test_major_with_lts_false_is_valid(self):
+        """A non-LTS major release with an explicit lts=false validates."""
+        errors = []
+        release = _make_major(2150, attributes={"lts": False})
+        assert validate_release_data(release, errors) is True
+        assert errors == []

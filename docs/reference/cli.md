@@ -56,6 +56,7 @@ Process and filter releases data from a file or URL.
 | `--version VERSION`                                        | —                       | Filter by a specific version. Accepts `major` (for example, `1312`), `major.minor` (for example, `1312.0`), or `major.minor.patch` (for example, `1312.0.0`). |
 | `--fields FIELDS`                                          | see below               | Comma-separated list of output fields.                                                                                                                        |
 | `--no-header`                                              | —                       | Omit the column header row in shell output.                                                                                                                   |
+| `--check-lifecycle`                                        | —                       | Validate the queried releases against the Garden Linux lifecycle rules. Releases with `version.major < 1877` are hard excluded and not checked. Exits non-zero on any mismatch. |
 | `-V`                                                       | —                       | Show the program version number and exit.                                                                                                                     |
 
 ### Default output fields
