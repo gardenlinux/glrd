@@ -8,6 +8,8 @@ from datetime import datetime
 import requests
 import tabulate
 import yaml
+from dateutil.relativedelta import relativedelta
+import pytz
 
 from .release_collection import ReleaseCollection
 from .release_model import Release
@@ -20,6 +22,12 @@ from .util import (
     get_version,
     NoAliasDumper,
 )
+
+# Lifecycle compliance checks only apply to releases from this major version
+# onwards. Older releases were created under different lifecycle rules
+# (extended = released + 6 months, eol = released + 9 months) and are hard
+# excluded from the check. See docs/explanation/release-lifecycle.md.
+LIFECYCLE_CHECK_MIN_MAJOR = 1877
 
 DEFAULTS = dict(
     DEFAULTS,
@@ -565,6 +573,12 @@ def parse_arguments():
         help="Omit the header in shell output.",
     )
 
+    parser.add_argument(
+        "--check-lifecycle",
+        action="store_true",
+        help="Check releases against lifecycles rules.",
+    )
+
     parser.add_argument("-V", action="version", version=f"%(prog)s {get_version()}")
 
     return parser.parse_args()
@@ -671,6 +685,172 @@ def get_oci_url(release):
         sys.exit(ERROR_CODES["format_error"])
 
 
+def check_releases_lifecycle(context_releases, query_releases):
+    """
+    Validate query_releases' dates against Garden Linux lifecycle rules.
+    Returns True if all query_releases matched, False otherwise.
+    """
+    mismatches = []
+
+    # Sort context minor releases by minor version inside major version groups
+    # to facilitate Case 2a and Case 2b
+    minors_by_major = {}
+    for r in context_releases:
+        if r.get("type") == "minor":
+            major_num = r["version"]["major"]
+            minors_by_major.setdefault(major_num, []).append(r)
+
+    for major_num in minors_by_major:
+        minors_by_major[major_num].sort(key=lambda x: x["version"].get("minor", 0))
+
+    # Parent majors keyed by major number
+    majors_by_num = {
+        r["version"]["major"]: r for r in context_releases if r.get("type") == "major"
+    }
+
+    print("Checking release lifecycle compliance...")
+
+    matched_count = 0
+    mismatched_count = 0
+
+    for r in query_releases:
+        rtype = r.get("type")
+        name = r.get("name")
+
+        # Hard exclude releases older than LIFECYCLE_CHECK_MIN_MAJOR. These
+        # predate the current lifecycle rules and must not be checked or
+        # reported on.
+        major_num = r.get("version", {}).get("major")
+        if isinstance(major_num, int) and major_num < LIFECYCLE_CHECK_MIN_MAJOR:
+            continue
+
+        # Nightly and dev do not carry extended/eol dates
+        if rtype in ("nightly", "dev"):
+            print(f"  {name}: OK (ephemeral type)")
+            matched_count += 1
+            continue
+
+        released_str = r.get("lifecycle", {}).get("released", {}).get("isodate")
+        if not released_str:
+            print(f"  {name}: FAIL (missing released date)")
+            mismatches.append((name, "released", "YYYY-MM-DD", "N/A"))
+            mismatched_count += 1
+            continue
+
+        try:
+            released_dt = datetime.strptime(released_str, "%Y-%m-%d").replace(
+                tzinfo=pytz.UTC
+            )
+        except ValueError:
+            print(f"  {name}: FAIL (invalid released date format)")
+            mismatches.append((name, "released", "YYYY-MM-DD", released_str))
+            mismatched_count += 1
+            continue
+
+        if rtype == "major":
+            # Check standard maintenance (extended) and end of life (eol)
+            is_lts = r.get("attributes", {}).get("lts", False)
+
+            # Expected extended is released + 9 months
+            expected_extended_dt = released_dt + relativedelta(months=9)
+            expected_extended = expected_extended_dt.strftime("%Y-%m-%d")
+
+            # Expected EOL is released + 15 months (standard) or 5 years (LTS), aligned to end of month
+            if is_lts:
+                expected_eol_dt = (
+                    released_dt + relativedelta(years=5) + relativedelta(day=31)
+                )
+            else:
+                expected_eol_dt = (
+                    released_dt + relativedelta(months=15) + relativedelta(day=31)
+                )
+            expected_eol = expected_eol_dt.strftime("%Y-%m-%d")
+
+            actual_extended = (
+                r.get("lifecycle", {}).get("extended", {}).get("isodate", "N/A")
+            )
+            actual_eol = r.get("lifecycle", {}).get("eol", {}).get("isodate", "N/A")
+
+            release_ok = True
+            if actual_extended != expected_extended:
+                mismatches.append(
+                    (name, "extended", expected_extended, actual_extended)
+                )
+                release_ok = False
+            if actual_eol != expected_eol:
+                mismatches.append((name, "eol", expected_eol, actual_eol))
+                release_ok = False
+
+            if release_ok:
+                print(f"  {name}: OK")
+                matched_count += 1
+            else:
+                print(f"  {name}: FAIL (date mismatch)")
+                mismatched_count += 1
+
+        elif rtype == "minor":
+            major_num = r["version"]["major"]
+            series = minors_by_major.get(major_num, [])
+
+            # Find the index of current release in the series
+            try:
+                idx = next(i for i, x in enumerate(series) if x["name"] == name)
+            except StopIteration:
+                print(f"  {name}: FAIL (not found in series)")
+                mismatches.append((name, "series", "found", "not found"))
+                mismatched_count += 1
+                continue
+
+            # Case 2a: Intermediate minor release (not the last)
+            if idx < len(series) - 1:
+                next_minor = series[idx + 1]
+                expected_eol = (
+                    next_minor.get("lifecycle", {})
+                    .get("released", {})
+                    .get("isodate", "N/A")
+                )
+            else:
+                # Case 2b: Latest minor release (last)
+                parent_major = majors_by_num.get(major_num)
+                if parent_major:
+                    expected_eol = (
+                        parent_major.get("lifecycle", {})
+                        .get("eol", {})
+                        .get("isodate", "N/A")
+                    )
+                else:
+                    expected_eol = "N/A (missing parent major)"
+
+            actual_eol = r.get("lifecycle", {}).get("eol", {}).get("isodate", "N/A")
+
+            if actual_eol == expected_eol:
+                print(f"  {name}: OK")
+                matched_count += 1
+            else:
+                mismatches.append((name, "eol", expected_eol, actual_eol))
+                print(f"  {name}: FAIL (date mismatch)")
+                mismatched_count += 1
+
+        else:
+            print(f"  {name}: OK (type {rtype} bypassed)")
+            matched_count += 1
+
+    print("\nSummary:")
+    print(f"  Total Checked: {matched_count + mismatched_count}")
+    print(f"  Passed:        {matched_count}")
+    print(f"  Failed:        {mismatched_count}")
+
+    if mismatches:
+        print("\nMismatches detailed:")
+        for name, field, expected, actual in mismatches:
+            print(f"  - {name}: {field} mismatch")
+            print(f"    Expected: {expected}")
+            print(f"    Actual:   {actual}")
+        return False
+
+    return True
+
+
 def process_query(args):
     """Process the query based on command line arguments."""
     # Load releases
@@ -686,6 +866,48 @@ def process_query(args):
     if not releases:
         logging.error("No releases found.")
         sys.exit(ERROR_CODES["no_releases"])
+
+    if getattr(args, "check_lifecycle", False):
+        # We need all releases as background context to resolve minor version relationships
+        context_releases = []
+        for t in ["major", "minor"]:
+            if args.input_type == "file" and not args.no_input_split:
+                input_file = f"{args.input_file_prefix}-{t}.{args.input_format}"
+                if not os.path.exists(input_file):
+                    continue
+            try:
+                type_releases = load_all_releases(
+                    t,
+                    args.input_type,
+                    args.input_url,
+                    args.input_file_prefix,
+                    args.input_format,
+                    args.no_input_split,
+                )
+                context_releases.extend(type_releases)
+            except SystemExit as e:
+                if e.code != ERROR_CODES["file_not_found"]:
+                    raise
+        # Apply the same filters on the query releases so we check what was queried
+        query_releases = list(releases)
+        if args.version:
+            query_releases = filter_releases(query_releases, version=args.version)
+        if args.type:
+            query_releases = filter_releases(query_releases, release_types=args.type)
+        if args.active:
+            query_releases = filter_active_releases(query_releases)
+        elif args.archived:
+            query_releases = filter_archived_releases(query_releases)
+        if args.latest:
+            latest = find_latest_release(query_releases)
+            query_releases = [latest] if latest else []
+
+            query_releases = sort_releases(query_releases)
+
+        ok = check_releases_lifecycle(context_releases, query_releases)
+        if not ok:
+            sys.exit(ERROR_CODES["validation_error"])
+        sys.exit(0)
 
     # Filter by version if specified
     if args.version:

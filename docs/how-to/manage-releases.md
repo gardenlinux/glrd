@@ -60,7 +60,7 @@ This generates `releases-major.json`, `releases-minor.json`, `releases-nightly.j
 
 ## Create a major release
 
-When you create a major release, GLRD automatically calculates default `extended` and `eol` dates (released + 6 months and + 9 months respectively). See [Default major dates](/explanation/glrd-release-lifecycle.md#default-major-dates) for details.
+When you create a major release, GLRD automatically calculates default `extended` and `eol` dates (released + 9 months and + 15 months respectively, with the `eol` rounded to the end of the month). Major versions before `1877` used an earlier model (released + 6 months and + 9 months). See [Default major dates](/explanation/glrd-release-lifecycle.md#default-major-dates) for details.
 
 ```bash
 # Use default dates

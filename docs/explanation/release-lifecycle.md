@@ -34,20 +34,45 @@ Every release in GLRD has a `lifecycle` object. The phases present depend on the
 
 ## Default major dates
 
-When you create a major release without explicitly setting `extended` or `eol` dates, GLRD calculates defaults based on the [Garden Linux Release Plan](/reference/releases/release-lifecycle.md):
+When you create a major release without explicitly setting `extended` or `eol` dates, GLRD calculates defaults based on the [Garden Linux Release Plan](/reference/releases/release-lifecycle.md). The rules changed with major version `1877`, so the defaults depend on the `version.major` of the release.
 
-- **`extended`** = `released` date + 6 months
-- **`eol`** = `released` date + 9 months
+### Current behavior (major ≥ 1877)
 
-**Example — `major-1443`:**
+- **`extended`** = `released` date + 9 months (representing the standard maintenance phase)
+- **`eol`** = `released` date + 15 months, always adjusted to end at the end of a month (representing standard maintenance + 6 months of extended maintenance)
 
-| Phase      | Date                    |
-| ---------- | ----------------------- |
-| `released` | 2024-03-13              |
-| `extended` | 2024-09-13 (+ 6 months) |
-| `eol`      | 2025-01-13 (+ 9 months) |
+An exception is made for **LTS (Long-Term Support)** releases, where the `eol` date defaults to **5 years** from the `released` date, also adjusted to end at the end of the month. You can flag a major release as LTS by passing the `--lts` option during creation, which sets the `"lts"` attribute to `true`.
+
+**Example — Standard `major-2150`:**
+
+| Phase      | Date                       | Description |
+| ---------- | -------------------------- | ----------- |
+| `released` | 2026-02-23                 | Publication date |
+| `extended` | 2026-11-23 (+ 9 months)    | Extended maintenance begins |
+| `eol`      | 2027-05-31 (+ 15 months)   | EOL (ends at end of month) |
+
+**Example — LTS `major-1877` (created with `--lts`):**
+
+| Phase      | Date                       | Description |
+| ---------- | -------------------------- | ----------- |
+| `released` | 2025-05-26                 | Publication date |
+| `extended` | 2026-02-26 (+ 9 months)    | Extended maintenance begins |
+| `eol`      | 2030-05-31 (+ 5 years)     | EOL (ends at end of month) |
 
 You can always override the calculated defaults by passing `--lifecycle-extended-isodatetime` and `--lifecycle-eol-isodatetime` to `glrd-manage --create`.
+
+### Legacy behavior (major < 1877)
+
+Major releases before `1877` were created under an earlier lifecycle model with a shorter maintenance window and no end-of-month rounding:
+
+- **`extended`** = `released` date + 6 months
+- **`eol`** = `released` date + 9 months (not rounded to the end of the month)
+
+:::info Lifecycle compliance check
+The lifecycle compliance check (`glrd --check-lifecycle`) **hard excludes** releases with `version.major < 1877`. These releases are neither validated nor reported, because they do not follow the current lifecycle rules. The threshold is defined as `LIFECYCLE_CHECK_MIN_MAJOR = 1877` in the GLRD codebase (`glrd/query.py`).
+
+Note that some early major releases carry manually maintained dates that deviate from the +6/+9 default described above.
+:::
 
 ## Major and minor release dependencies
 
@@ -91,5 +116,11 @@ Garden Linux [introduced semantic versioning](https://github.com/gardenlinux/gar
 The threshold is defined as `V2_SCHEMA_THRESHOLD = 2017` in the GLRD codebase (`glrd/util.py`). Any release with a `version.major` value of 2017 or higher uses the v2 schema and requires the `patch` field in `version` objects for `minor`, `nightly`, and `dev` releases.
 
 For `major` and `next` releases, the version only ever stores `major`; the distinction between v1 and v2 does not affect their schema shape.
+
+### Schema v2.1 (current default)
+
+Schema **v2.1** is a backward-compatible evolution of v2 and the default for new releases (`SCHEMA_VERSION = "2.1"` in `glrd/util.py`). It adds an optional `attributes.lts` flag to `major` and `next` releases to mark Long-Term Support releases. Because the field is optional, all existing v2 data stays valid without changes.
+
+The `major.minor.patch` threshold is unchanged (still `2017`); the `lts` flag is an orthogonal addition. LTS applies from major `1877` onwards — this is enforced by the lifecycle/management logic (see [Default major dates](#default-major-dates)), not by the schema, which only describes the optional field.
 
 <RelatedTopics />

@@ -42,6 +42,10 @@ ERROR_CODES = {
 
 V2_SCHEMA_THRESHOLD = 2017
 
+# Current default schema revision. v2.1 is a backward-compatible superset of v2
+# that adds the optional ``attributes.lts`` field on major/next releases.
+SCHEMA_VERSION = "2.1"
+
 
 def uses_patch_version(major: int) -> bool:
     """Check if a major version requires the patch field (v2 schema)."""

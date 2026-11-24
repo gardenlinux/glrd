@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from jsonschema import ValidationError, validate
 
-from .schema import SCHEMA_V1, SCHEMA_V2
+from .schema import SCHEMA_V1, SCHEMA_DEFAULT
 from .util import ERROR_CODES, V2_SCHEMA_THRESHOLD
 
 
@@ -74,19 +74,19 @@ def get_schema_for_release(release: Dict) -> Optional[Dict]:
     release_type = release.get("type")
     version = release.get("version", {})
 
-    # For major and next releases, always use v2 schema
+    # For major and next releases, always use the default (v2.1) schema
     # (they don't have major.minor.patch version numbers >= 2017)
     if release_type in ["major", "next"]:
-        return SCHEMA_V2[release_type]
+        return SCHEMA_DEFAULT[release_type]
 
     # For minor, nightly, and dev releases, determine schema version based
     # on version number
     if release_type in ["minor", "nightly", "dev"]:
         major = version.get("major", 0)
 
-        # Use v2 schema (with patch field) for versions >= 2017.0.0
+        # Use the default (v2.1) schema with patch field for versions >= 2017.0.0
         if major >= V2_SCHEMA_THRESHOLD:
-            return SCHEMA_V2[release_type]
+            return SCHEMA_DEFAULT[release_type]
         else:
             return SCHEMA_V1[release_type]
 

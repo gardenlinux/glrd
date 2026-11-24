@@ -4,7 +4,14 @@ Unified schema definitions for Garden Linux releases.
 Schema v1: versions < 2017.0.0 (no patch field required)
 Schema v2: versions >= 2017.0.0 (patch field required for minor, nightly, dev)
 
-This module generates both schemas from shared building blocks to eliminate
+Schema v2.1 is a backward-compatible evolution of v2 and the current default.
+It adds an optional ``attributes`` object (including the optional ``lts`` flag)
+to ``major`` and ``next`` releases. Because the new field is optional, all
+existing v2 release data remains valid. The LTS semantics ("LTS applies from
+major 1877 onwards") are enforced in the lifecycle/management logic, not by the
+schema itself, so the schema only describes the optional field.
+
+This module generates the schemas from shared building blocks to eliminate
 code duplication between the previous schema_v1.py and schema_v2.py files.
 """
 
@@ -166,6 +173,11 @@ def _build_next_major_schema(release_type: str) -> dict:
                 "properties": lifecycle_props,
                 "required": ["released", "extended", "eol"],
             },
+            "attributes": {
+                "type": "object",
+                "properties": {"lts": {"type": "boolean", "default": False}},
+                "additionalProperties": True,
+            },
         },
         "required": ["name", "type", "version", "lifecycle"],
     }
@@ -183,3 +195,10 @@ def _generate_schema(include_patch: bool) -> dict:
 
 SCHEMA_V1 = _generate_schema(include_patch=False)
 SCHEMA_V2 = _generate_schema(include_patch=True)
+
+# Schema v2.1 is a backward-compatible superset of v2: the optional
+# ``attributes.lts`` field on major/next releases is already part of the
+# generated schema, so v2.1 is identical in structure to v2. It is exposed as a
+# named alias and set as the default schema for new releases.
+SCHEMA_V2_1 = SCHEMA_V2
+SCHEMA_DEFAULT = SCHEMA_V2_1

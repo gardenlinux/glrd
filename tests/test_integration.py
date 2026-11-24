@@ -1618,3 +1618,284 @@ class TestGLRDIntegration:
         assert nightly_oci.startswith("ghcr.io/gardenlinux/nightly")
         assert minor_oci.startswith("ghcr.io/gardenlinux/gardenlinux")
         assert nightly_oci != minor_oci
+
+    def test_standard_major_release_default_dates(self, test_dir, manage_script):
+        """Verify default extended (9M) and EOL (15M end-of-month) dates for standard major releases."""
+        prefix = os.path.join(test_dir, "releases-std-major-defaults")
+        output_file = f"{prefix}-major.json"
+
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "major",
+                "--version",
+                "2050",
+                "--lifecycle-released-isodatetime",
+                "2025-01-15T12:00:00",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        assert os.path.exists(output_file)
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "major-2050"
+        assert release["lifecycle"]["released"]["isodate"] == "2025-01-15"
+        assert release["lifecycle"]["extended"]["isodate"] == "2025-10-15"
+        assert release["lifecycle"]["eol"]["isodate"] == "2026-04-30"
+        assert "attributes" not in release
+
+    def test_lts_major_release_default_dates(self, test_dir, manage_script):
+        """Verify default extended (9M) and EOL (5Y) dates and attributes for LTS major releases."""
+        prefix = os.path.join(test_dir, "releases-lts-major-defaults")
+        output_file = f"{prefix}-major.json"
+
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "major",
+                "--version",
+                "2060",
+                "--lifecycle-released-isodatetime",
+                "2025-01-15T12:00:00",
+                "--lts",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        assert os.path.exists(output_file)
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "major-2060"
+        assert release["lifecycle"]["released"]["isodate"] == "2025-01-15"
+        assert release["lifecycle"]["extended"]["isodate"] == "2025-10-15"
+        assert release["lifecycle"]["eol"]["isodate"] == "2030-01-31"
+        assert release["attributes"] == {"lts": True}
+
+    def test_check_lifecycle_command_passing(
+        self, test_dir, manage_script, query_script
+    ):
+        """Test that --check-lifecycle succeeds (exits 0) on fully compliant releases."""
+        prefix = os.path.join(test_dir, "releases-check-lifecycle-ok")
+
+        # Create standard major
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "major",
+                "--version",
+                "3000",
+                "--lifecycle-released-isodatetime",
+                "2025-01-15T12:00:00",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        # Run --check-lifecycle
+        result = self.run_query_command(
+            query_script,
+            [
+                "--check-lifecycle",
+                "--type",
+                "major",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+            ],
+        )
+
+        assert "Checking release lifecycle compliance..." in result.stdout
+        assert "major-3000: OK" in result.stdout
+        assert "Passed:        1" in result.stdout
+
+    def test_check_lifecycle_command_failing(
+        self, test_dir, manage_script, query_script
+    ):
+        """Test that --check-lifecycle fails (exits non-zero) and
+        details mismatches when a release has incorrect dates."""
+        prefix = os.path.join(test_dir, "releases-check-lifecycle-fail")
+
+        # Create standard major with custom (incorrect/legacy) dates
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "major",
+                "--version",
+                "3010",
+                "--lifecycle-released-isodatetime",
+                "2025-01-15T12:00:00",
+                "--lifecycle-extended-isodatetime",
+                "2025-05-15T12:00:00",  # Incorrect standard 9M extended
+                "--lifecycle-eol-isodatetime",
+                "2025-10-15T12:00:00",  # Incorrect standard 15M EOL
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        # Run --check-lifecycle - should fail
+        import subprocess
+
+        project_root = os.path.dirname(os.path.dirname(query_script))
+        cmd = [
+            sys.executable,
+            "-m",
+            "glrd.query",
+            "--check-lifecycle",
+            "--type",
+            "major",
+            "--input-type",
+            "file",
+            "--input-file-prefix",
+            prefix,
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+        )
+
+        assert result.returncode == 1  # validation_error
+        assert "major-3010: FAIL (date mismatch)" in result.stdout
+        assert "Failed:        1" in result.stdout
+        assert "extended mismatch" in result.stdout
+        assert "Expected: 2025-10-15" in result.stdout
+        assert "Actual:   2025-05-15" in result.stdout
+
+    def test_update_release_lts_flag_success(self, test_dir, manage_script):
+        """Verify that updating a major release with --lts successfully sets the lts attribute to True."""
+        prefix = os.path.join(test_dir, "releases-update-lts-ok")
+        output_file = f"{prefix}-major.json"
+
+        # Create a standard major release
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "major",
+                "--version",
+                "4000",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        # Update the major release to be LTS
+        self.run_manage_command(
+            manage_script,
+            [
+                "--update",
+                "major-4000",
+                "--lts",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+            ],
+        )
+
+        # Verify the LTS flag is present
+        data = self.load_json_output(output_file)
+        release = data["releases"][0]
+        assert release["name"] == "major-4000"
+        assert release["attributes"] == {"lts": True}
+
+    def test_update_release_lts_flag_failure(self, test_dir, manage_script):
+        """Verify that updating a non-major release (like minor) with --lts raises a validation error."""
+        prefix = os.path.join(test_dir, "releases-update-lts-fail")
+
+        # Create a parent major release first
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "major",
+                "--version",
+                "2017",
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-query",
+            ],
+        )
+
+        # Create a minor release
+        self.run_manage_command(
+            manage_script,
+            [
+                "--create",
+                "minor",
+                "--version",
+                "2017.0.0",
+                "--input-type",
+                "file",
+                "--input-file-prefix",
+                prefix,
+                "--output-format",
+                "json",
+                "--output-file-prefix",
+                prefix,
+                "--no-flavors",
+            ],
+        )
+
+        # Try to update the minor release with --lts - should fail
+        import subprocess
+
+        project_root = os.path.dirname(os.path.dirname(manage_script))
+        cmd = [
+            sys.executable,
+            "-m",
+            "glrd.manage",
+            "--update",
+            "minor-2017.0.0",
+            "--lts",
+            "--input-type",
+            "file",
+            "--input-file-prefix",
+            prefix,
+            "--output-format",
+            "json",
+            "--output-file-prefix",
+            prefix,
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+        )
+        assert result.returncode == 1  # validation_error
+        assert (
+            "Error: '--lts' is only valid for 'major' and 'next' release types"
+            in result.stderr
+        )
