@@ -1,6 +1,8 @@
 name: test GLRD GH action
 on:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   query:
     name: query
