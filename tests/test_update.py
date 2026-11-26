@@ -14,7 +14,6 @@ import sys
 import pytest
 from unittest.mock import MagicMock
 
-
 SAMPLE_MAJOR_RELEASE = {
     "name": "major-1520",
     "type": "major",

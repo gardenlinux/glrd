@@ -19,7 +19,6 @@ from gardenlinux.flavors import Parser
 from gardenlinux.git import Repository
 from gardenlinux.s3 import Bucket
 
-
 ERROR_CODES = {
     "validation_error": 1,
     "subprocess_output_error": 2,
